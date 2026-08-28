@@ -31,5 +31,6 @@ data class DriverSection(
 
 data class DistrictGroup(
     val district: String,
-    val people: List<Person>
+    val people: List<Person>,
+    val activeCount: Int = people.count { !it.isDelivered }
 )

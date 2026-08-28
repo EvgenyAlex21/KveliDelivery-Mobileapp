@@ -14,6 +14,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
+import com.kvelidelivery.app.R
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -38,20 +42,23 @@ fun HelpScreen(onSkip: () -> Unit) {
         ) {
             Spacer(Modifier.height(48.dp))
 
-            Icon(
-                imageVector = Icons.Rounded.LocalShipping,
-                contentDescription = null,
-                modifier = Modifier.size(72.dp),
-                tint = PrimaryBlue
+            Image(
+                painter = painterResource(R.drawable.logo_kveli),
+                contentDescription = "Квели",
+                modifier = Modifier
+                    .height(100.dp)
+                    .padding(bottom = 8.dp),
+                contentScale = ContentScale.Fit
             )
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(8.dp))
 
             Text(
-                text = "Развоз персонала",
+                text = "Развоз Квели",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = TextAlign.Center
             )
 
             Text(

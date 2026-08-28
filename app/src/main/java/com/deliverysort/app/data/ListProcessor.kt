@@ -80,6 +80,13 @@ object ListProcessor {
 
         if ("кугеси" in norm) return "КУГЕСИ"
         if (listOf("богдан", "б.х", "бх", "кошкино").any { it in norm }) return "БОГДАНКА"
+        // Explicit fixes for common short forms
+        if ("лебедева" in norm) return "СЗР"
+        if (("500" in norm && "чебоксар" in norm) || "500лет" in norm.replace(" ", "")) return "СЗР"
+        if (("50" in norm || "50лет" in norm.replace(" ", "") || "50-лет" in norm) &&
+            ("октябр" in norm || norm.contains(Regex("50\\s*лет\\s*\\d")) || "50лет" in norm.replace(" ", ""))
+        ) return "ЦЕНТР"
+        if (("трактор" in norm || "прт" in norm) && Regex("\\b16\\b").containsMatchIn(norm)) return "НЮР"
 
         if (norm in ADDRESS_INDEX) return ADDRESS_INDEX[norm]
 
@@ -464,8 +471,9 @@ object ListProcessor {
                     val plist = groups[d]
                     if (plist != null && plist.isNotEmpty()) {
                         val sorted = sortPeople(plist)
-                        districtGroups.add(DistrictGroup(d, sorted))
-                        total += sorted.size
+                        val activeCount = sorted.count { !it.isDelivered }
+                        districtGroups.add(DistrictGroup(d, sorted, activeCount))
+                        total += activeCount
                     }
                 }
                 if (districtGroups.isNotEmpty()) {

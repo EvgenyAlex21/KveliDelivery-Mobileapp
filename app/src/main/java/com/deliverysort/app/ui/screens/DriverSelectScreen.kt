@@ -1,5 +1,6 @@
 package com.kvelidelivery.app.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -14,9 +15,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.kvelidelivery.app.R
 import com.kvelidelivery.app.data.Driver
 import com.kvelidelivery.app.ui.theme.PrimaryBlue
 
@@ -31,7 +35,7 @@ fun DriverSelectScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // Header
+        // Header — centered
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -40,23 +44,37 @@ fun DriverSelectScreen(
                         listOf(PrimaryBlue, PrimaryBlue.copy(alpha = 0.85f))
                     )
                 )
-                .padding(horizontal = 24.dp, vertical = 32.dp)
+                .padding(horizontal = 24.dp, vertical = 28.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Column {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Image(
+                    painter = painterResource(R.drawable.logo_kveli),
+                    contentDescription = "Квели",
+                    modifier = Modifier
+                        .height(56.dp)
+                        .padding(bottom = 8.dp),
+                    contentScale = ContentScale.Fit
+                )
                 Text(
                     "Привет!",
                     style = MaterialTheme.typography.headlineSmall,
                     color = Color.White,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
                 )
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(6.dp))
                 Text(
                     todayDate,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = Color.White.copy(alpha = 0.9f)
+                    color = Color.White.copy(alpha = 0.9f),
+                    textAlign = TextAlign.Center
                 )
-                Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
                     Icon(
                         Icons.Rounded.Schedule,
                         contentDescription = null,
@@ -67,7 +85,8 @@ fun DriverSelectScreen(
                     Text(
                         "Слоты: ${timeSlots.joinToString(", ")}",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.9f)
+                        color = Color.White.copy(alpha = 0.9f),
+                        textAlign = TextAlign.Center
                     )
                 }
             }
@@ -83,7 +102,10 @@ fun DriverSelectScreen(
                 "Выбери водителя",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(bottom = 16.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                textAlign = TextAlign.Center
             )
 
             Driver.entries.forEach { driver ->
@@ -141,12 +163,6 @@ private fun DriverCard(driver: Driver, onClick: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Text(
-                "→",
-                fontSize = 22.sp,
-                color = PrimaryBlue,
-                fontWeight = FontWeight.Bold
-            )
         }
     }
 }

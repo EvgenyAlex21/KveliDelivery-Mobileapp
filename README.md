@@ -24,7 +24,7 @@
 ## Структура
 
 ```
-app/src/main/java/com/deliverysort/app/
+app/src/main/java/com/kvelidelivery/app/
 ├── MainActivity.kt
 ├── data/
 │   ├── AddressData.kt      # Районы, синонимы, STREET_HINTS

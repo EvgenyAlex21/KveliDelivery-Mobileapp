@@ -59,9 +59,7 @@ fun KveliDeliveryApp(viewModel: AppViewModel = viewModel()) {
                         errorMessage = viewModel.errorMessage,
                         onInputChange = { viewModel.updateInput(it) },
                         onProcess = { viewModel.processList() },
-                        onBack = {
-                            viewModel.finishTrip() // reset to driver select
-                        }
+                        onBack = { viewModel.resetToDriverSelect() }
                     )
                 }
             }
@@ -82,6 +80,7 @@ fun KveliDeliveryApp(viewModel: AppViewModel = viewModel()) {
                     )
                 }
             }
+            is Screen.Finished -> FinishedScreen()
         }
     }
 }

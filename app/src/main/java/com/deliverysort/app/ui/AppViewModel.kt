@@ -21,6 +21,7 @@ sealed class Screen {
     data object InputList : Screen()
     data object Processing : Screen()
     data object Result : Screen()
+    data object Finished : Screen()
 }
 
 class AppViewModel : ViewModel() {
@@ -137,6 +138,24 @@ class AppViewModel : ViewModel() {
     }
 
     fun finishTrip() {
+        currentScreen = Screen.Finished
+        viewModelScope.launch {
+            delay(2200)
+            people = emptyList()
+            structured = emptyList()
+            undefinedPeople = emptyList()
+            inputText = ""
+            selectedDriver = null
+            errorMessage = null
+            currentScreen = Screen.Help
+        }
+    }
+
+    fun goBackToInput() {
+        currentScreen = Screen.InputList
+    }
+
+    fun resetToDriverSelect() {
         people = emptyList()
         structured = emptyList()
         undefinedPeople = emptyList()
@@ -145,8 +164,5 @@ class AppViewModel : ViewModel() {
         errorMessage = null
         currentScreen = Screen.DriverSelect
     }
-
-    fun goBackToInput() {
-        currentScreen = Screen.InputList
-    }
 }
+
