@@ -114,8 +114,8 @@ fun HelpScreen(onSkip: () -> Unit) {
                     )
                     Spacer(Modifier.height(12.dp))
                     DriverInfo("№1", "СЗР + ЮЗР")
-                    DriverInfo("№2", "ЦЕНТР + НОВЫЙ + НЧК (+ Богданка)")
-                    DriverInfo("№3", "НЮР + КУГЕСИ (+ Богданка)")
+                    DriverInfo("№2", "ЦЕНТР + НОВЫЙ + НЧК (+ БОГДАНКА)")
+                    DriverInfo("№3", "НЮР + КУГЕСИ (+ БОГДАНКА)")
                     Spacer(Modifier.height(8.dp))
                     Text(
                         "Богданка автоматически назначается водителю с меньшим числом людей.",

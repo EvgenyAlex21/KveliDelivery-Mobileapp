@@ -42,6 +42,7 @@ fun ResultScreen(
     onToggleDelivered: (String) -> Unit,
     onMoveToDriver: (String, Driver) -> Unit,
     onMoveToDistrict: (String, String) -> Unit,
+    onMoveToTimeSlot: (String, String) -> Unit,
     onFinish: () -> Unit
 ) {
     var expandedDrivers by remember { mutableStateOf(setOf(selectedDriver.number)) }
@@ -197,6 +198,7 @@ fun ResultScreen(
     showMoveDialog?.let { person ->
         MovePersonDialog(
             person = person,
+            timeSlots = timeSlots,
             onDismiss = { showMoveDialog = null },
             onMoveToDriver = { drv ->
                 onMoveToDriver(person.id, drv)
@@ -204,6 +206,10 @@ fun ResultScreen(
             },
             onMoveToDistrict = { dist ->
                 onMoveToDistrict(person.id, dist)
+                showMoveDialog = null
+            },
+            onMoveToTimeSlot = { slot ->
+                onMoveToTimeSlot(person.id, slot)
                 showMoveDialog = null
             }
         )
@@ -343,6 +349,14 @@ private fun PersonRow(
                         textDecoration = textDecoration
                     )
                 }
+                if (person.timeGroup.isNotBlank()) {
+                    Text(
+                        " · до ${person.timeGroup}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        textDecoration = textDecoration
+                    )
+                }
             }
         }
         IconButton(onClick = onMove, modifier = Modifier.size(36.dp)) {
@@ -359,9 +373,11 @@ private fun PersonRow(
 @Composable
 private fun MovePersonDialog(
     person: Person,
+    timeSlots: List<String>,
     onDismiss: () -> Unit,
     onMoveToDriver: (Driver) -> Unit,
-    onMoveToDistrict: (String) -> Unit
+    onMoveToDistrict: (String) -> Unit,
+    onMoveToTimeSlot: (String) -> Unit
 ) {
     val districts = listOf(
         "СЗР", "ЮЗР", "БОГДАНКА", "ЦЕНТР", "НОВЫЙ", "НЧК", "НЮР", "КУГЕСИ"
@@ -377,6 +393,38 @@ private fun MovePersonDialog(
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium
                 )
+                if (person.timeGroup.isNotBlank()) {
+                    Text(
+                        "Сейчас: до ${person.timeGroup}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                Text("В другой слот (вышел раньше):", style = MaterialTheme.typography.labelLarge)
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    timeSlots.forEach { slot ->
+                        val selected = slot == person.timeGroup
+                        if (selected) {
+                            Button(
+                                onClick = { },
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+                            ) {
+                                Text(slot, fontSize = 12.sp)
+                            }
+                        } else {
+                            OutlinedButton(
+                                onClick = { onMoveToTimeSlot(slot) },
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+                            ) {
+                                Text(slot, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
                 Spacer(Modifier.height(12.dp))
                 Text("К водителю:", style = MaterialTheme.typography.labelLarge)
                 Spacer(Modifier.height(6.dp))

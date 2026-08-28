@@ -87,6 +87,10 @@ object ListProcessor {
             ("октябр" in norm || norm.contains(Regex("50\\s*лет\\s*\\d")) || "50лет" in norm.replace(" ", ""))
         ) return "ЦЕНТР"
         if (("трактор" in norm || "прт" in norm) && Regex("\\b16\\b").containsMatchIn(norm)) return "НЮР"
+        if ("324" in norm && ("стрелк" in norm || "дивиз" in norm)) return "НЮР"
+        if (("универ" in norm || "университетская" in norm) &&
+            ("38/2" in norm || "38к2" in norm || "38 к2" in norm)
+        ) return "СЗР"
 
         if (norm in ADDRESS_INDEX) return ADDRESS_INDEX[norm]
 
