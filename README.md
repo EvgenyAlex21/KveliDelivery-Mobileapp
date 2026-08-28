@@ -2,8 +2,6 @@
 
 <div align="center">
 
-**Приложение для сортировки списков развоза персонала ресторана «Квели»**
-
 ![KveliDelivery](app/src/main/res/drawable/logo_kveli.jpg)
 
 [![Android](https://img.shields.io/badge/Android-8.0%2B-green?logo=android)](https://www.android.com/)
