@@ -35,7 +35,6 @@ fun DriverSelectScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // Header — centered
         Box(
             modifier = Modifier
                 .fillMaxWidth()

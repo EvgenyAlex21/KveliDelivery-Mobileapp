@@ -60,7 +60,6 @@ object ListProcessor {
             }
             best = max(best, (matches * 100) / shorter.length)
         }
-        // also check containment
         if (longer.contains(shorter)) best = max(best, 90)
         return best
     }
@@ -80,7 +79,6 @@ object ListProcessor {
 
         if ("кугеси" in norm) return "КУГЕСИ"
         if (listOf("богдан", "б.х", "бх", "кошкино").any { it in norm }) return "БОГДАНКА"
-        // Explicit fixes for common short forms
         if ("лебедева" in norm) return "СЗР"
         if (("500" in norm && "чебоксар" in norm) || "500лет" in norm.replace(" ", "")) return "СЗР"
         if (("50" in norm || "50лет" in norm.replace(" ", "") || "50-лет" in norm) &&
@@ -106,7 +104,6 @@ object ListProcessor {
             }
         }
 
-        // Fuzzy search
         var bestScore = 0
         var bestDist: String? = null
         for ((addrNorm, dist) in ADDRESS_INDEX) {
@@ -256,7 +253,6 @@ object ListProcessor {
 
             val normLine = normalize(line)
 
-            // pure time line
             if (normLine.matches(Regex("^(до\\s*)?\\d{1,2}(:\\d{2})?\\s*:?\\s*$"))) {
                 for ((pat, tval) in timePatterns) {
                     if (pat.containsMatchIn(normLine)) {
@@ -267,7 +263,6 @@ object ListProcessor {
                 continue
             }
 
-            // section keyword
             var roleFound: String? = null
             for ((key, role) in sectionKeywords) {
                 if (key in normLine && normLine.length < 100) {
@@ -303,7 +298,6 @@ object ListProcessor {
                 line = line2
             }
 
-            // latin name: section
             if (line.matches(Regex("^[A-Za-z][A-Za-z0-9_.]*\\s*:.*")) &&
                 sectionKeywords.keys.none { it in normalize(line) }
             ) {
@@ -410,7 +404,8 @@ object ListProcessor {
                             district = district,
                             role = currentRole,
                             timeGroup = timeGroup,
-                            raw = if (i == 0) rawP else "$rawP #${i + 1}"
+                            raw = if (i == 0) rawP else "$rawP #${i + 1}",
+                            orderIndex = people.size
                         )
                     )
                 }
@@ -435,6 +430,7 @@ object ListProcessor {
 
         fun sortPeople(plist: List<Person>): List<Person> {
             return plist.sortedWith(compareBy(
+                { it.orderIndex },
                 { (it.name ?: "").lowercase().replace('ё', 'е') },
                 { it.address.lowercase().replace('ё', 'е') }
             ))
@@ -448,12 +444,10 @@ object ListProcessor {
 
             val groups = groupByDistrict(slotPeople.filter { it.district != null })
 
-            // Count without bog
             val c2 = orderDriver2.sumOf { groups[it]?.size ?: 0 }
             val c3 = orderDriver3.sumOf { groups[it]?.size ?: 0 }
             val bogTo2 = c2 <= c3
 
-            // Build driver sections based on selected driver order
             val driverOrder = when (selectedDriver) {
                 Driver.ONE -> listOf(Driver.ONE, Driver.TWO, Driver.THREE)
                 Driver.TWO -> listOf(Driver.TWO, Driver.ONE, Driver.THREE)
@@ -485,23 +479,19 @@ object ListProcessor {
                 }
             }
 
-            // Handle undefined separately later if needed
             if (driverSections.isNotEmpty()) {
                 result.add(TimeSlotGroup(slot, driverSections))
             }
         }
 
-        // Add undefined as special
         if (undef.isNotEmpty()) {
             val undefGroup = DistrictGroup("НЕОПРЕДЕЛЕНО", undef)
             val undefSection = DriverSection(
-                driver = Driver.ONE, // placeholder
+                driver = Driver.ONE, 
                 districts = listOf(undefGroup),
                 totalCount = undef.size
             )
-            // Attach to last or create special
             if (result.isNotEmpty()) {
-                // We handle undefined in UI separately
             }
         }
 

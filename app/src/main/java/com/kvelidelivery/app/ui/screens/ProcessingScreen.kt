@@ -69,7 +69,7 @@ fun ProcessingScreen() {
                     contentDescription = null,
                     modifier = Modifier
                         .size(48.dp)
-                        .rotate(rotation / 8f), // subtle
+                        .rotate(rotation / 8f),
                     tint = PrimaryBlue
                 )
             }
@@ -92,7 +92,6 @@ fun ProcessingScreen() {
 
             Spacer(Modifier.height(24.dp))
 
-            // Dots animation
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 repeat(3) { index ->
                     val delay = index * 150

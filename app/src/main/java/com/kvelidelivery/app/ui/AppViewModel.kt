@@ -92,7 +92,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             rebuildStructured()
         }
         val restored = Screen.fromName(session.screen)
-        // Если есть список — сразу в результат; если выбран водитель — ввод; иначе справка/выбор
         currentScreen = when {
             people.isNotEmpty() && selectedDriver != null -> Screen.Result
             selectedDriver != null && inputText.isNotBlank() -> Screen.InputList
@@ -103,7 +102,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun persist() {
-        // Не пишем во время Processing/Finished — save() сам нормализует
         store.save(
             screen = currentScreen.name(),
             driverNumber = selectedDriver?.number,
@@ -207,6 +205,38 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         persist()
     }
 
+    /**
+     * Сдвиг человека вверх/вниз внутри своего района и слота.
+     * direction: -1 = вверх (раньше в списке), +1 = вниз.
+     */
+    fun reorderPerson(personId: String, direction: Int) {
+        val person = people.find { it.id == personId } ?: return
+        val group = people
+            .filter { it.district == person.district && it.timeGroup == person.timeGroup }
+            .sortedBy { it.orderIndex }
+        val idx = group.indexOfFirst { it.id == personId }
+        if (idx < 0) return
+        val targetIdx = idx + direction
+        if (targetIdx < 0 || targetIdx >= group.size) return
+
+        val a = group[idx]
+        val b = group[targetIdx]
+        val orderA = a.orderIndex
+        val orderB = b.orderIndex
+        val newOrderA = if (orderA != orderB) orderB else orderA + direction
+        val newOrderB = if (orderA != orderB) orderA else orderB - direction
+
+        people = people.map {
+            when (it.id) {
+                a.id -> it.copy(orderIndex = newOrderA)
+                b.id -> it.copy(orderIndex = newOrderB)
+                else -> it
+            }
+        }
+        rebuildStructured()
+        persist()
+    }
+
     fun finishTrip() {
         currentScreen = Screen.Finished
         viewModelScope.launch {
@@ -228,7 +258,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun resetToDriverSelect() {
-        // Назад с экрана ввода — не сбрасываем всю поездку, только возвращаем к выбору водителя
         currentScreen = Screen.DriverSelect
         persist()
     }

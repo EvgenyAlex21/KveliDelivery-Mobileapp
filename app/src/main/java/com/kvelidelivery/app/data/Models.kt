@@ -9,13 +9,14 @@ data class Person(
     var timeGroup: String,
     var raw: String,
     var isDelivered: Boolean = false,
-    var assignedDriver: Int? = null // 1, 2 or 3; null means auto
+    var assignedDriver: Int? = null, 
+    var orderIndex: Int = 0
 )
 
 enum class Driver(val number: Int, val title: String, val districts: List<String>, val description: String) {
     ONE(1, "Водитель №1", listOf("СЗР", "ЮЗР"), "СЗР + ЮЗР"),
-    TWO(2, "Водитель №2", listOf("ЦЕНТР", "НОВЫЙ", "НЧК"), "ЦЕНТР + НОВЫЙ + НЧК (+ Богданка)"),
-    THREE(3, "Водитель №3", listOf("НЮР", "КУГЕСИ"), "НЮР + КУГЕСИ (+ Богданка)")
+    TWO(2, "Водитель №2", listOf("ЦЕНТР", "НОВЫЙ", "НЧК"), "ЦЕНТР + НОВЫЙ + НЧК (+ БОГДАНКА)"),
+    THREE(3, "Водитель №3", listOf("НЮР", "КУГЕСИ"), "НЮР + КУГЕСИ (+ БОГДАНКА)")
 }
 
 data class TimeSlotGroup(

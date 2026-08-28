@@ -25,7 +25,6 @@ class SessionStore(context: Context) {
         inputText: String,
         people: List<Person>
     ) {
-        // Не сохраняем промежуточные экраны обработки/финиша
         val screenToSave = when (screen) {
             "Processing" -> "Result"
             "Finished" -> "Help"
@@ -43,6 +42,7 @@ class SessionStore(context: Context) {
                 put("raw", p.raw)
                 put("isDelivered", p.isDelivered)
                 put("assignedDriver", p.assignedDriver)
+                put("orderIndex", p.orderIndex)
             })
         }
         prefs.edit()
@@ -74,7 +74,8 @@ class SessionStore(context: Context) {
                         timeGroup = o.optString("timeGroup", "23:00"),
                         raw = o.optString("raw"),
                         isDelivered = o.optBoolean("isDelivered", false),
-                        assignedDriver = if (o.isNull("assignedDriver")) null else o.optInt("assignedDriver")
+                        assignedDriver = if (o.isNull("assignedDriver")) null else o.optInt("assignedDriver"),
+                        orderIndex = o.optInt("orderIndex", 0)
                     )
                 )
             }

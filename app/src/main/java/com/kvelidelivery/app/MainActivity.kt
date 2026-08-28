@@ -77,6 +77,7 @@ fun KveliDeliveryApp(viewModel: AppViewModel = viewModel()) {
                         onMoveToDriver = { id, drv -> viewModel.movePersonToDriver(id, drv) },
                         onMoveToDistrict = { id, dist -> viewModel.movePersonToDistrict(id, dist) },
                         onMoveToTimeSlot = { id, slot -> viewModel.movePersonToTimeSlot(id, slot) },
+                        onReorder = { id, dir -> viewModel.reorderPerson(id, dir) },
                         onFinish = { viewModel.finishTrip() }
                     )
                 }
