@@ -494,9 +494,13 @@ object ListProcessor {
     ): List<TimeSlotGroup> {
         val configured = getTimeSlots(extendedSlots)
         val fromPeople = people.map { it.timeGroup }.filter { it.isNotBlank() }.distinct()
+
+        // Определяем порядок слотов
+        val slotOrder = listOf("22:00", "23:00", "00:00", "01:00")
+
         val slots = (configured + fromPeople)
             .distinct()
-            .sortedBy { SLOT_ORDER.indexOf(it).let { i -> if (i < 0) 100 else i } }
+            .sortedBy { slot -> slotOrder.indexOf(slot).let { i -> if (i < 0) 100 else i } }
         val byTime = people.groupBy { it.timeGroup }
         val undef = people.filter { it.district == null }
 
@@ -568,7 +572,7 @@ object ListProcessor {
         if (undef.isNotEmpty()) {
             val undefGroup = DistrictGroup("НЕОПРЕДЕЛЕНО", undef)
             val undefSection = DriverSection(
-                driver = Driver.ONE, 
+                driver = Driver.ONE,
                 districts = listOf(undefGroup),
                 totalCount = undef.size
             )

@@ -524,7 +524,7 @@ private fun MoveBottomSheetContent(
     onClose: () -> Unit
 ) {
     val districts = listOf(
-        "СЗР", "ЮЗР", "БОГДАН", "ЦЕНТР", "НОВЫЙ", "НЧК", "НЮР", "КУГЕСИ"
+        "СЗР", "ЮЗР", "БОГДАНКА", "ЦЕНТР", "НОВЫЙ", "НЧК", "НЮР", "КУГЕСИ"
     )
 
     Column(
