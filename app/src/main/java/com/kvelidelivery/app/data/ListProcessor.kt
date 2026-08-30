@@ -284,6 +284,7 @@ object ListProcessor {
             "доставка" to "дост",
             "кухня" to "кух",
             "хостес" to "хост",
+            "хост" to "хост",
             "офики" to "офф",
             "вип" to "офф",
             "бар" to "бар"
@@ -327,7 +328,7 @@ object ListProcessor {
             if (roleFound != null) {
                 currentRole = roleFound
                 var line2 = line.replace(
-                    Regex("(?:клининг|развоз|раннер|ранеры|караоке|доставка|кухня|хостес|офики|вип|бар)\\s*:?\\s*", RegexOption.IGNORE_CASE),
+                    Regex("(?:клининг|развоз|раннер|ранеры|караоке|доставка|кухня|хостес|хост|офики|вип|бар)\\s*:?\\s*", RegexOption.IGNORE_CASE),
                     " "
                 )
                 line2 = line2.replace(Regex("\\s+"), " ").trim()
@@ -364,7 +365,7 @@ object ListProcessor {
                     "ран" in n -> "офф-ран"
                     "клининг" in n -> "клин"
                     "кухн" in n -> "кух"
-                    "хостес" in n -> "хост"
+                    "хостес" in n || n.trim() == "хост" -> "хост"
                     "бар" in n -> "бар"
                     "караоке" in n -> "кар"
                     "доставк" in n -> "дост"
@@ -372,6 +373,26 @@ object ListProcessor {
                 }
                 continue
             }
+            run {
+                val mRole = Regex(
+                    """(?i)^(?:[А-Яа-яЁёA-Za-z][А-Яа-яЁёA-Za-z0-9_.]*)\s*:\s*(клининг|развоз|раннер|ранеры|караоке|доставка|кухня|хостес|хост|офики|вип|бар)\s*$"""
+                ).find(line.trim())
+                if (mRole != null) {
+                    val rk = mRole.groupValues[1].lowercase().replace('ё', 'е')
+                    currentRole = when {
+                        "ран" in rk -> "офф-ран"
+                        "клининг" in rk -> "клин"
+                        "кухн" in rk -> "кух"
+                        "хост" in rk -> "хост"
+                        "бар" in rk -> "бар"
+                        "караоке" in rk || rk == "кар" -> "кар"
+                        "доставк" in rk -> "дост"
+                        else -> "офф"
+                    }
+                    line = ""
+                }
+            }
+            if (line.isEmpty()) continue
             if (normalize(line).matches(Regex("^(до\\s*)?\\d{1,2}(:\\d{2})?\\s*$"))) continue
             if (line.length < 4) continue
 
@@ -421,7 +442,7 @@ object ListProcessor {
                 val addrNorm = normalize(address)
                 if (addrNorm.length < 2) continue
                 if (addrNorm.matches(Regex("^(до\\s*)?\\d{1,2}(:\\d{2})?$"))) continue
-                if (addrNorm in listOf("клининг", "развоз", "кухня", "хостес", "бар", "караоке", "доставка", "ранеры", "ранер", "офики", "вип", "терраса", "этаж")) continue
+                if (addrNorm in listOf("клининг", "развоз", "кухня", "хостес", "хост", "бар", "караоке", "доставка", "ранеры", "ранер", "офики", "вип", "терраса", "этаж")) continue
                 if (listOf("добрый вечер", "добрый день", "привет", "здравствуй", "как дела").any { it in addrNorm }) continue
                 if (listOf("добрый вечер", "добрый день", "привет").any { it in normalize(rawP) }) continue
 
@@ -452,17 +473,36 @@ object ListProcessor {
                 addressClean = addressClean.replace(Regex("[\\p{So}\\p{Cn}\\p{Cs}\\p{Sk}]+"), "") 
                 addressClean = addressClean.replace(Regex("чебоксары[,\\s]*", RegexOption.IGNORE_CASE), "").trim()
                 addressClean = addressClean.replace(Regex("\\s*\\([^)]*(?:чел|своим|факт|скорее)[^)]*\\)?\\s*", RegexOption.IGNORE_CASE), " ").trim()
+                addressClean = addressClean.replace(Regex("(?i)\\s*[xх]\\s*\\d+\b"), " ").trim()
+                addressClean = addressClean.replace(
+                    Regex("(?i)\\s*\b(кугеси|сзр|юзр|нюр|нчк|центр|новый|богданка)\b\\s*$"),
+                    ""
+                ).trim()
                 addressClean = addressClean.replace(Regex("\\s+"), " ").trim(' ', '.')
 
                 var district = findDistrict(addressClean)
                 if (district == null && listOf("богдан", "б.х", "бх").any { it in normalize(addressClean) }) {
                     district = "БОГДАНКА"
                 }
+                if (district == null) {
+                    val rawNorm = normalize("$rawP $address")
+                    district = when {
+                        "кугеси" in rawNorm -> "КУГЕСИ"
+                        "винокуров" in rawNorm -> "НЧК"
+                        else -> null
+                    }
+                }
 
                 var nPeople = 1
                 val mN = Regex("(\\d+)\\s*чел", RegexOption.IGNORE_CASE).find(normalize(rawP))
                 if (mN != null) {
                     nPeople = max(1, mN.groupValues[1].toIntOrNull() ?: 1)
+                } else {
+                    val mX = Regex("(?i)(?:^|\\s)[xх]\\s*(\\d+)\b").find(normalize(rawP))
+                        ?: Regex("(?i)(?:^|\\s)[xх]\\s*(\\d+)\b").find(normalize(address))
+                    if (mX != null) {
+                        nPeople = max(1, mX.groupValues[1].toIntOrNull() ?: 1)
+                    }
                 }
 
                 for (i in 0 until nPeople) {
@@ -495,7 +535,6 @@ object ListProcessor {
         val configured = getTimeSlots(extendedSlots)
         val fromPeople = people.map { it.timeGroup }.filter { it.isNotBlank() }.distinct()
 
-        // Определяем порядок слотов
         val slotOrder = listOf("22:00", "23:00", "00:00", "01:00")
 
         val slots = (configured + fromPeople)
