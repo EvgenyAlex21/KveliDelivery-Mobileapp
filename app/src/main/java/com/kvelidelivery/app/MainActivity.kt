@@ -46,6 +46,8 @@ fun KveliDeliveryApp(viewModel: AppViewModel = viewModel()) {
             is Screen.DriverSelect -> DriverSelectScreen(
                 todayDate = viewModel.todayDate,
                 timeSlots = viewModel.timeSlots,
+                extendedSlots = viewModel.extendedSlots,
+                onExtendedSlotsChange = { viewModel.updateExtendedSlots(it) },
                 onSelect = { viewModel.selectDriver(it) }
             )
             is Screen.InputList -> {
@@ -78,6 +80,9 @@ fun KveliDeliveryApp(viewModel: AppViewModel = viewModel()) {
                         onMoveToDistrict = { id, dist -> viewModel.movePersonToDistrict(id, dist) },
                         onMoveToTimeSlot = { id, slot -> viewModel.movePersonToTimeSlot(id, slot) },
                         onReorder = { id, dir -> viewModel.reorderPerson(id, dir) },
+                        onUpdatePerson = { id, name, address, district, role, timeGroup ->
+                            viewModel.updatePerson(id, name, address, district, role, timeGroup)
+                        },
                         onFinish = { viewModel.finishTrip() }
                     )
                 }

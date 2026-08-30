@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Flag
@@ -57,11 +58,13 @@ fun ResultScreen(
     onMoveToDistrict: (String, String) -> Unit,
     onMoveToTimeSlot: (String, String) -> Unit,
     onReorder: (String, Int) -> Unit,
+    onUpdatePerson: (String, String?, String, String?, String?, String) -> Unit,
     onFinish: () -> Unit
 ) {
     var expandedDrivers by remember { mutableStateOf(setOf(selectedDriver.number)) }
     var movePerson by remember { mutableStateOf<Person?>(null) }
     var reorderPersonId by remember { mutableStateOf<String?>(null) }
+    var editPerson by remember { mutableStateOf<Person?>(null) }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
@@ -151,7 +154,7 @@ fun ResultScreen(
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "Зажми человека, чтобы поменять порядок в районе",
+                            "Зажми человека: порядок в районе и редактирование",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
                             textAlign = TextAlign.Center
@@ -194,7 +197,8 @@ fun ResultScreen(
                                 reorderPersonId = if (reorderPersonId == id) null else id
                             },
                             onReorder = onReorder,
-                            onClearReorder = { reorderPersonId = null }
+                            onClearReorder = { reorderPersonId = null },
+                            onEditRequest = { editPerson = it }
                         )
                     }
                 }
@@ -223,7 +227,8 @@ fun ResultScreen(
                             reorderPersonId = if (reorderPersonId == person.id) null else person.id
                         },
                         onMoveUp = { onReorder(person.id, -1) },
-                        onMoveDown = { onReorder(person.id, 1) }
+                        onMoveDown = { onReorder(person.id, 1) },
+                        onEdit = { editPerson = person }
                     )
                 }
             }
@@ -263,6 +268,19 @@ fun ResultScreen(
             )
         }
     }
+
+    editPerson?.let { person ->
+        EditPersonDialog(
+            person = person,
+            timeSlots = timeSlots,
+            onDismiss = { editPerson = null },
+            onSave = { name, address, district, role, timeGroup ->
+                onUpdatePerson(person.id, name, address, district, role, timeGroup)
+                editPerson = null
+                reorderPersonId = null
+            }
+        )
+    }
 }
 
 @Composable
@@ -276,7 +294,8 @@ private fun DriverExpandableCard(
     onMoveRequest: (Person) -> Unit,
     onLongPress: (String) -> Unit,
     onReorder: (String, Int) -> Unit,
-    onClearReorder: () -> Unit
+    onClearReorder: () -> Unit,
+    onEditRequest: (Person) -> Unit
 ) {
     val borderColor = if (isSelected) PrimaryBlue else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
 
@@ -348,7 +367,8 @@ private fun DriverExpandableCard(
                                 onMove = { onMoveRequest(person) },
                                 onLongPress = { onLongPress(person.id) },
                                 onMoveUp = { onReorder(person.id, -1) },
-                                onMoveDown = { onReorder(person.id, 1) }
+                                onMoveDown = { onReorder(person.id, 1) },
+                                onEdit = { onEditRequest(person) }
                             )
                         }
                     }
@@ -366,7 +386,8 @@ private fun PersonRow(
     onMove: () -> Unit,
     onLongPress: () -> Unit,
     onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit
+    onMoveDown: () -> Unit,
+    onEdit: () -> Unit
 ) {
     val alpha = if (person.isDelivered) 0.5f else 1f
     val textDecoration = if (person.isDelivered) TextDecoration.LineThrough else TextDecoration.None
@@ -445,34 +466,48 @@ private fun PersonRow(
         }
 
         AnimatedVisibility(visible = isReorderTarget) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
             ) {
-                Text(
-                    "Порядок в районе:",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f)
-                )
-                FilledTonalButton(
-                    onClick = onMoveUp,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = "Выше", modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Выше")
+                    Text(
+                        "Порядок:",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilledTonalButton(
+                        onClick = onMoveUp,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = "Выше", modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Выше")
+                    }
+                    FilledTonalButton(
+                        onClick = onMoveDown,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = "Ниже", modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Ниже")
+                    }
                 }
+                Spacer(Modifier.height(6.dp))
                 FilledTonalButton(
-                    onClick = onMoveDown,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    onClick = onEdit,
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                 ) {
-                    Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = "Ниже", modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Ниже")
+                    Icon(Icons.Rounded.Edit, contentDescription = "Редактировать", modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Редактировать")
                 }
             }
         }
@@ -662,4 +697,148 @@ private fun SectionHeader(icon: @Composable () -> Unit, title: String) {
             color = MaterialTheme.colorScheme.onSurface
         )
     }
+}
+
+@Composable
+private fun EditPersonDialog(
+    person: Person,
+    timeSlots: List<String>,
+    onDismiss: () -> Unit,
+    onSave: (name: String?, address: String, district: String?, role: String?, timeGroup: String) -> Unit
+) {
+    var name by remember { mutableStateOf(person.name ?: "") }
+    var address by remember { mutableStateOf(person.address) }
+    var district by remember { mutableStateOf(person.district ?: "") }
+    var role by remember { mutableStateOf(person.role ?: "") }
+    var timeGroup by remember { mutableStateOf(person.timeGroup) }
+
+    val districts = listOf(
+        "СЗР", "ЮЗР", "БОГДАНКА", "ЦЕНТР", "НОВЫЙ", "НЧК", "НЮР", "КУГЕСИ"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                "Редактировать",
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Имя") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = address,
+                    onValueChange = { address = it },
+                    label = { Text("Адрес") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = role,
+                    onValueChange = { role = it },
+                    label = { Text("Роль (клин, офф, бар…)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    "Район",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                districts.chunked(4).forEach { row ->
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        row.forEach { d ->
+                            FilterChip(
+                                selected = district == d,
+                                onClick = { district = d },
+                                label = {
+                                    Text(
+                                        d,
+                                        fontSize = 11.sp,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = TextAlign.Center
+                                    )
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = PrimaryBlue,
+                                    selectedLabelColor = Color.White
+                                )
+                            )
+                        }
+                        repeat(4 - row.size) {
+                            Spacer(Modifier.weight(1f))
+                        }
+                    }
+                }
+                Text(
+                    "Слот",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    timeSlots.forEach { slot ->
+                        FilterChip(
+                            selected = timeGroup == slot,
+                            onClick = { timeGroup = slot },
+                            label = {
+                                Text(
+                                    slot,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = TextAlign.Center
+                                )
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = PrimaryBlue,
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (address.isNotBlank()) {
+                        onSave(
+                            name.ifBlank { null },
+                            address.trim(),
+                            district.ifBlank { null },
+                            role.ifBlank { null },
+                            timeGroup
+                        )
+                    }
+                },
+                enabled = address.isNotBlank()
+            ) {
+                Text("Сохранить")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Отмена")
+            }
+        }
+    )
 }

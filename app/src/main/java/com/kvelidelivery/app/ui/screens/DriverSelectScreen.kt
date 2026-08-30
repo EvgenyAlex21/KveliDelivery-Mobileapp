@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.DirectionsCar
+import androidx.compose.material.icons.rounded.NightsStay
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -28,6 +29,8 @@ import com.kvelidelivery.app.ui.theme.PrimaryBlue
 fun DriverSelectScreen(
     todayDate: String,
     timeSlots: List<String>,
+    extendedSlots: Boolean,
+    onExtendedSlotsChange: (Boolean) -> Unit,
     onSelect: (Driver) -> Unit
 ) {
     Column(
@@ -97,6 +100,69 @@ fun DriverSelectScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(20.dp)
         ) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (extendedSlots)
+                        PrimaryBlue.copy(alpha = 0.12f)
+                    else
+                        MaterialTheme.colorScheme.surface
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .background(
+                                PrimaryBlue.copy(alpha = 0.12f),
+                                RoundedCornerShape(12.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Rounded.NightsStay,
+                            contentDescription = null,
+                            tint = PrimaryBlue,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Расширенные слоты",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            if (extendedSlots)
+                                "22:00, 23:00, 00:00, 01:00"
+                            else
+                                "Включи, если ресторан работает до 01:00",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = extendedSlots,
+                        onCheckedChange = onExtendedSlotsChange,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = PrimaryBlue
+                        )
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+
             Text(
                 "Выбери водителя",
                 style = MaterialTheme.typography.titleLarge,

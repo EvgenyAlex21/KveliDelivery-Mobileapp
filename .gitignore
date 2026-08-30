@@ -11,3 +11,5 @@
 *.ap_
 *.aab
 app/build/
+/keys
+app/release/

@@ -68,6 +68,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     var errorMessage by mutableStateOf<String?>(null)
         private set
 
+    var extendedSlots by mutableStateOf(false)
+        private set
+
     val todayDate: String
         get() {
             val now = java.time.LocalDateTime.now()
@@ -77,7 +80,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
 
     val timeSlots: List<String>
-        get() = ListProcessor.getTimeSlots()
+        get() = ListProcessor.getTimeSlots(extendedSlots)
 
     init {
         restoreSession()
@@ -88,6 +91,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         selectedDriver = Driver.entries.find { it.number == session.driverNumber }
         inputText = session.inputText
         people = session.people
+        extendedSlots = session.extendedSlots
         if (people.isNotEmpty()) {
             rebuildStructured()
         }
@@ -106,7 +110,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             screen = currentScreen.name(),
             driverNumber = selectedDriver?.number,
             inputText = inputText,
-            people = people
+            people = people,
+            extendedSlots = extendedSlots
         )
     }
 
@@ -118,6 +123,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun selectDriver(driver: Driver) {
         selectedDriver = driver
         currentScreen = Screen.InputList
+        persist()
+    }
+
+    fun updateExtendedSlots(enabled: Boolean) {
+        extendedSlots = enabled
+        if (people.isNotEmpty()) rebuildStructured()
         persist()
     }
 
@@ -136,7 +147,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             delay(1200)
             try {
-                val parsed = ListProcessor.parseInput(inputText)
+                val parsed = ListProcessor.parseInput(inputText, extendedSlots)
                 if (parsed.isEmpty()) {
                     errorMessage = "Не удалось распознать ни одного человека. Проверьте формат списка."
                     currentScreen = Screen.InputList
@@ -157,7 +168,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun rebuildStructured() {
         val drv = selectedDriver ?: Driver.ONE
-        structured = ListProcessor.buildStructuredOutput(people, drv)
+        structured = ListProcessor.buildStructuredOutput(people, drv, extendedSlots)
         undefinedPeople = ListProcessor.getUndefined(people)
     }
 
@@ -205,10 +216,32 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         persist()
     }
 
-    /**
-     * Сдвиг человека вверх/вниз внутри своего района и слота.
-     * direction: -1 = вверх (раньше в списке), +1 = вниз.
-     */
+    fun updatePerson(
+        personId: String,
+        name: String?,
+        address: String,
+        district: String?,
+        role: String?,
+        timeGroup: String
+    ) {
+        val clampedTime = ListProcessor.clampSlotToAllowed(timeGroup, extendedSlots)
+        val resolvedDistrict = district?.takeIf { it.isNotBlank() }
+            ?: ListProcessor.findDistrict(address)
+        people = people.map {
+            if (it.id == personId) {
+                it.copy(
+                    name = name?.takeIf { n -> n.isNotBlank() },
+                    address = address.trim(),
+                    district = resolvedDistrict,
+                    role = role?.takeIf { r -> r.isNotBlank() },
+                    timeGroup = clampedTime
+                )
+            } else it
+        }
+        rebuildStructured()
+        persist()
+    }
+
     fun reorderPerson(personId: String, direction: Int) {
         val person = people.find { it.id == personId } ?: return
         val group = people
@@ -247,6 +280,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             inputText = ""
             selectedDriver = null
             errorMessage = null
+            extendedSlots = false
             store.clear()
             currentScreen = Screen.Help
         }

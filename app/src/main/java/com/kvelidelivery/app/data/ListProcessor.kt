@@ -35,7 +35,8 @@ object ListProcessor {
         return index
     }
 
-    fun getTimeSlots(): List<String> {
+    fun getTimeSlots(extended: Boolean = false): List<String> {
+        if (extended) return listOf("22:00", "23:00", "00:00", "01:00")
         val weekday = LocalDateTime.now().dayOfWeek
         return if (weekday == DayOfWeek.FRIDAY || weekday == DayOfWeek.SATURDAY) {
             listOf("22:00", "23:00", "00:00", "01:00")
@@ -44,9 +45,24 @@ object ListProcessor {
         }
     }
 
-    fun getDefaultMainTime(): String = getTimeSlots().last()
+    fun getDefaultMainTime(extended: Boolean = false): String = getTimeSlots(extended).last()
 
     fun getDeliveryDefaultTime(): String = "22:00"
+
+    fun hourToSlot(h: Int): String? = when (h) {
+        22 -> "22:00"
+        0, 24 -> "00:00"
+        1 -> "01:00"
+        23 -> "23:00"
+        else -> null
+    }
+
+    fun clampSlotToAllowed(slot: String?, extended: Boolean): String {
+        val allowed = getTimeSlots(extended)
+        if (slot.isNullOrBlank()) return getDefaultMainTime(extended)
+        if (slot in allowed) return slot
+        return allowed.last()
+    }
 
     private fun partialRatio(s1: String, s2: String): Int {
         if (s1.isEmpty() || s2.isEmpty()) return 0
@@ -89,6 +105,9 @@ object ListProcessor {
         if (("универ" in norm || "университетская" in norm) &&
             ("38/2" in norm || "38к2" in norm || "38 к2" in norm)
         ) return "СЗР"
+        if ("газировка" in norm) return "НЮР"
+        if ("кома" in norm && ("лен" in norm || Regex("\\d").containsMatchIn(norm))) return "НЮР"
+        if (Regex("лен(инского)?\\s*ком").containsMatchIn(norm)) return "НЮР"
 
         if (norm in ADDRESS_INDEX) return ADDRESS_INDEX[norm]
 
@@ -130,6 +149,8 @@ object ListProcessor {
         if ("питер" in norm) return "СЗР"
         if ("черныш" in norm) return "ЮЗР"
         if ("неон" in norm) return "СЗР"
+        if ("газировка" in norm) return "НЮР"
+        if ("кома" in norm && ("лен" in norm || Regex("\\d").containsMatchIn(norm))) return "НЮР"
         return null
     }
 
@@ -143,16 +164,48 @@ object ListProcessor {
             val m = p.find(text)
             if (m != null) {
                 val h = m.groupValues[1].toIntOrNull() ?: continue
-                return when (h) {
-                    22 -> "22:00"
-                    0 -> "00:00"
-                    1 -> "01:00"
-                    23 -> "23:00"
-                    else -> null
-                }
+                hourToSlot(h)?.let { return it }
             }
         }
         return null
+    }
+
+    private fun splitLineByTimes(line: String): List<Pair<String, String?>> {
+        val re = Regex("""(?i)(.+?)(?:\s+до\s*(\d{1,2})(?=\s|$))""")
+        val matches = re.findAll(line).toList()
+        if (matches.isEmpty()) return listOf(line to null)
+
+        val result = mutableListOf<Pair<String, String?>>()
+        var lastEnd = 0
+        for (m in matches) {
+            val chunk = m.groupValues[1].trim()
+            val h = m.groupValues[2].toIntOrNull()
+            val slot = h?.let { hourToSlot(it) }
+            lastEnd = m.range.last + 1
+            if (chunk.isEmpty() || chunk.length < 3) continue
+            val low = normalize(chunk)
+            val isJunk = low in listOf("девочки", "мальчики", "все", "остальные", "люди", "далее") ||
+                (!low.any { it.isDigit() } && low.length < 6 && AddressData.STREET_HINTS.none { it in low })
+            if (!isJunk) result.add(chunk to slot)
+        }
+        if (lastEnd < line.length) {
+            val tail = line.substring(lastEnd).trim()
+            if (tail.length > 2) {
+                val parts = splitMultiplePeople(tail)
+                for (part in parts) result.add(part to null)
+            }
+        }
+        if (result.isEmpty()) return listOf(line to null)
+        return result
+    }
+
+    private fun splitMultiplePeople(text: String): List<String> {
+        val t = text.trim()
+        if (t.length < 8) return listOf(t)
+        val parts = t.split(Regex("""(?<=\d)\s+(?=[А-Яа-яЁёA-Za-z])"""))
+            .map { it.trim() }
+            .filter { it.length > 2 }
+        return if (parts.size >= 2) parts else listOf(t)
     }
 
     private fun parsePersonLine(line: String): Pair<String?, String?> {
@@ -165,8 +218,8 @@ object ListProcessor {
             if (parts.size == 2 && parts[0].isNotBlank() && parts[1].isNotBlank()) {
                 var name = parts[0].trim()
                 var addr = parts[1].trim()
-                addr = addr.replace(Regex("\\s*\\(до\\s*\\d+\\)\\s*$", RegexOption.IGNORE_CASE), "").trim()
-                val nameIsLatin = name.matches(Regex("^[A-Za-z0-9_.]+$"))
+                addr = addr.replace(Regex("""\s*\(до\s*\d+\)\s*$""", RegexOption.IGNORE_CASE), "").trim()
+                val nameIsLatin = name.matches(Regex("""^[A-Za-z0-9_.]+$"""))
                 val wordsA = addr.split(" ")
                 if (nameIsLatin && wordsA.size >= 2) {
                     val w0 = wordsA[0]
@@ -183,7 +236,7 @@ object ListProcessor {
             }
         }
 
-        if (trimmed.matches(Regex("^(\\d+\\s*(т|эт|этаж|терраса)|ранер|ранеры|ранеры).*", RegexOption.IGNORE_CASE))) {
+        if (trimmed.matches(Regex("""^(\d+\s*(т|эт|этаж|терраса)|ранер|ранеры|ранеры).*""", RegexOption.IGNORE_CASE))) {
             return null to null
         }
 
@@ -214,13 +267,13 @@ object ListProcessor {
         }
     }
 
-    fun parseInput(text: String): List<Person> {
+    fun parseInput(text: String, extendedSlots: Boolean = false): List<Person> {
         var cleaned = text.replace(Regex("\\[\\d{2}\\.\\d{2}\\.\\d{4}\\s+\\d{1,2}:\\d{2}\\]\\s*"), "")
         val lines = cleaned.trim().lines()
         val people = mutableListOf<Person>()
         var currentRole: String? = null
         var currentTime: String? = null
-        val mainTime = getDefaultMainTime()
+        val mainTime = getDefaultMainTime(extendedSlots)
 
         val sectionKeywords = mapOf(
             "клининг" to "клин",
@@ -265,7 +318,8 @@ object ListProcessor {
 
             var roleFound: String? = null
             for ((key, role) in sectionKeywords) {
-                if (key in normLine && normLine.length < 100) {
+                val keyPos = normLine.indexOf(key)
+                if (keyPos >= 0 && (normLine.length < 120 || keyPos < 30)) {
                     roleFound = role
                     break
                 }
@@ -278,26 +332,21 @@ object ListProcessor {
                 )
                 line2 = line2.replace(Regex("\\s+"), " ").trim()
                 line2 = line2.replace(Regex("^[А-Яа-яA-Za-zЁё][А-Яа-яA-Za-zЁё0-9_.]*\\s*:\\s*"), "").trim()
-                val m = Regex("^(?:до|д)[\\s.]*(\\d{1,2})", RegexOption.IGNORE_CASE).find(line2)
-                if (m != null) {
-                    val h = m.groupValues[1].toIntOrNull()
-                    currentTime = when (h) {
-                        22 -> "22:00"
-                        0 -> "00:00"
-                        1 -> "01:00"
-                        23 -> "23:00"
-                        else -> currentTime
+                val looksLikePeople = line2.any { it.isDigit() } ||
+                    AddressData.STREET_HINTS.any { it.length > 3 && it in normalize(line2) }
+                if (!looksLikePeople) {
+                    val m = Regex("^(?:до|д)[\\s.]*(\\d{1,2})", RegexOption.IGNORE_CASE).find(line2)
+                    if (m != null) {
+                        currentTime = hourToSlot(m.groupValues[1].toIntOrNull() ?: -1) ?: currentTime
+                    } else {
+                        currentTime = extractInlineTime(line2)
                     }
-                } else {
-                    val tInline = extractInlineTime(line2)
-                    currentTime = tInline ?: null
+                    line2 = line2.replace(Regex("^(?:до|д)[\\s.]*\\d{1,2}\\s*", RegexOption.IGNORE_CASE), "").trim()
                 }
-                line2 = line2.replace(Regex("^(?:до|д)[\\s.]*\\d{1,2}\\s*", RegexOption.IGNORE_CASE), "").trim()
                 line2 = line2.replace(Regex("^[.\\s]+"), "").trim()
                 if (line2.isEmpty() || line2.length < 3) continue
                 line = line2
             }
-
             if (line.matches(Regex("^[A-Za-z][A-Za-z0-9_.]*\\s*:.*")) &&
                 sectionKeywords.keys.none { it in normalize(line) }
             ) {
@@ -329,28 +378,42 @@ object ListProcessor {
             line = line.replace(Regex("^до\\s*\\d{1,2}\\s*", RegexOption.IGNORE_CASE), "").trim()
             if (line.isEmpty()) continue
 
+            val timeMarks = Regex("(?i)до\\s*\\d{1,2}").findAll(line).count()
+            val timedChunks = if (timeMarks >= 2 || (timeMarks == 1 && line.length > 28)) {
+                splitLineByTimes(line)
+            } else {
+                listOf(line to null)
+            }
+
             val candidates = mutableListOf<Triple<String?, String, String>>()
-            if (line.length > 35 && line.count { it.isDigit() } >= 2) {
-                val rawParts = line.split(Regex("(?<=\\d)\\s+(?=[А-ЯЁA-Z])"))
-                val parts = mutableListOf<String>()
-                for (p in rawParts) {
-                    val pp = p.trim()
-                    if (pp.length < 3) {
-                        if (parts.isNotEmpty()) parts[parts.lastIndex] = parts.last() + " " + pp
-                        continue
+            val chunkTimes = mutableMapOf<String, String?>()
+
+            for ((chunk, chunkTime) in timedChunks) {
+                val subLines = mutableListOf<String>()
+                if (chunk.length > 35 && chunk.count { it.isDigit() } >= 2) {
+                    val rawParts = chunk.split(Regex("(?<=\\d)\\s+(?=[А-ЯЁA-Z])"))
+                    val parts = mutableListOf<String>()
+                    for (part in rawParts) {
+                        val pp = part.trim()
+                        if (pp.length < 3) {
+                            if (parts.isNotEmpty()) parts[parts.lastIndex] = parts.last() + " " + pp
+                            continue
+                        }
+                        parts.add(pp)
                     }
-                    parts.add(pp)
+                    if (parts.isEmpty()) subLines.add(chunk) else subLines.addAll(parts)
+                } else {
+                    subLines.add(chunk)
                 }
-                val finalParts = if (parts.isEmpty()) listOf(line) else parts
-                for (p in finalParts) {
-                    val pp = p.trim()
+                for (pp0 in subLines) {
+                    val pp = pp0.trim()
                     if (pp.isEmpty() || normalize(pp).matches(Regex("^(до\\s*\\d+|22|00|01|23)$"))) continue
                     val (n, a) = parsePersonLine(pp)
-                    if (a != null && a.length > 1) candidates.add(Triple(n, a, pp))
+                    if (a != null && a.length > 1) {
+                        candidates.add(Triple(n, a, pp))
+                        if (chunkTime != null) chunkTimes[pp] = chunkTime
+                    }
                 }
-            } else {
-                val (n, a) = parsePersonLine(line)
-                if (a != null && a.length > 1) candidates.add(Triple(n, a, line))
             }
 
             for ((name, address, rawP) in candidates) {
@@ -366,20 +429,27 @@ object ListProcessor {
                 val hasStreet = AddressData.STREET_HINTS.any { it in addrNorm } || AddressData.SYNONYMS.keys.any { it in addrNorm }
                 if (!hasDigit && !hasStreet && addrNorm !in ADDRESS_INDEX && addrNorm.length < 8) continue
 
-                val inlineT = extractInlineTime(rawP) ?: extractInlineTime(address)
-                val timeGroup = when {
+                val inlineT = chunkTimes[rawP] ?: extractInlineTime(rawP) ?: extractInlineTime(address)
+                var addressForParse = address
+                addressForParse = addressForParse.replace(Regex("(?i)\\s*до\\s*\\d{1,2}\\s*$"), "").trim()
+                val rawTime = when {
                     inlineT != null -> inlineT
                     currentRole == "дост" && currentTime == null -> getDeliveryDefaultTime()
                     else -> currentTime ?: mainTime
                 }
+                val timeGroup = clampSlotToAllowed(rawTime, extendedSlots)
 
-                var addressClean = address
+                var addressClean = addressForParse.ifBlank { address }
                 addressClean = addressClean.replace(Regex("\\d+\\s*чел\\.?\\s*", RegexOption.IGNORE_CASE), "")
                 addressClean = addressClean.replace(Regex("\\bгражд\\.?\\b", RegexOption.IGNORE_CASE), "гражданская")
                 addressClean = addressClean.replace(Regex("\\bлубумб[аыу]?\\b", RegexOption.IGNORE_CASE), "лумумбы")
                 addressClean = addressClean.replace(Regex("\\b50-лет\\b", RegexOption.IGNORE_CASE), "50 лет октября")
                 addressClean = addressClean.replace(Regex("\\bстрелковач\\b", RegexOption.IGNORE_CASE), "стрелковая")
                 addressClean = addressClean.replace(Regex("\\bгостело\\b", RegexOption.IGNORE_CASE), "гастелло")
+                addressClean = addressClean.replace(Regex("(?i)лен\\s*кома"), "ленинского комсомола")
+                addressClean = addressClean.replace(Regex("(?i)\\bкома\\s*(\\d+)"), "ленинского комсомола $1")
+                addressClean = addressClean.replace(Regex("(?i)\\bкома(\\d+)"), "ленинского комсомола $1")
+                addressClean = addressClean.replace(Regex("[\\p{So}\\p{Cn}\\p{Cs}\\p{Sk}]+"), "") 
                 addressClean = addressClean.replace(Regex("чебоксары[,\\s]*", RegexOption.IGNORE_CASE), "").trim()
                 addressClean = addressClean.replace(Regex("\\s*\\([^)]*(?:чел|своим|факт|скорее)[^)]*\\)?\\s*", RegexOption.IGNORE_CASE), " ").trim()
                 addressClean = addressClean.replace(Regex("\\s+"), " ").trim(' ', '.')
@@ -410,12 +480,23 @@ object ListProcessor {
                     )
                 }
             }
+            if (timedChunks.any { it.second != null }) {
+                currentTime = null
+            }
         }
         return people
     }
 
-    fun buildStructuredOutput(people: List<Person>, selectedDriver: Driver): List<TimeSlotGroup> {
-        val slots = getTimeSlots()
+    fun buildStructuredOutput(
+        people: List<Person>,
+        selectedDriver: Driver,
+        extendedSlots: Boolean = false
+    ): List<TimeSlotGroup> {
+        val configured = getTimeSlots(extendedSlots)
+        val fromPeople = people.map { it.timeGroup }.filter { it.isNotBlank() }.distinct()
+        val slots = (configured + fromPeople)
+            .distinct()
+            .sortedBy { SLOT_ORDER.indexOf(it).let { i -> if (i < 0) 100 else i } }
         val byTime = people.groupBy { it.timeGroup }
         val undef = people.filter { it.district == null }
 
@@ -492,6 +573,7 @@ object ListProcessor {
                 totalCount = undef.size
             )
             if (result.isNotEmpty()) {
+                // We handle undefined in UI separately
             }
         }
 

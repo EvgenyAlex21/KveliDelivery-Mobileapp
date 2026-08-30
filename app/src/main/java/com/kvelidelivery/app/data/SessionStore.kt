@@ -4,10 +4,6 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * Сохранение состояния поездки между запусками приложения.
- * Сброс только при «Завершить поездку».
- */
 class SessionStore(context: Context) {
 
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -16,14 +12,16 @@ class SessionStore(context: Context) {
         val screen: String,
         val driverNumber: Int?,
         val inputText: String,
-        val people: List<Person>
+        val people: List<Person>,
+        val extendedSlots: Boolean = false
     )
 
     fun save(
         screen: String,
         driverNumber: Int?,
         inputText: String,
-        people: List<Person>
+        people: List<Person>,
+        extendedSlots: Boolean = false
     ) {
         val screenToSave = when (screen) {
             "Processing" -> "Result"
@@ -50,6 +48,7 @@ class SessionStore(context: Context) {
             .putInt(KEY_DRIVER, driverNumber ?: -1)
             .putString(KEY_INPUT, inputText)
             .putString(KEY_PEOPLE, arr.toString())
+            .putBoolean(KEY_EXTENDED, extendedSlots)
             .apply()
     }
 
@@ -82,7 +81,8 @@ class SessionStore(context: Context) {
         } catch (_: Exception) {
             // ignore corrupt data
         }
-        return Session(screen, driverNum, input, people)
+        val extended = prefs.getBoolean(KEY_EXTENDED, false)
+        return Session(screen, driverNum, input, people, extended)
     }
 
     fun clear() {
@@ -95,5 +95,6 @@ class SessionStore(context: Context) {
         private const val KEY_DRIVER = "driver"
         private const val KEY_INPUT = "input"
         private const val KEY_PEOPLE = "people"
+        private const val KEY_EXTENDED = "extended_slots"
     }
 }
