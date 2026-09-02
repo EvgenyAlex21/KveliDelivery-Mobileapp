@@ -100,14 +100,17 @@ object ListProcessor {
         if (("50" in norm || "50лет" in norm.replace(" ", "") || "50-лет" in norm) &&
             ("октябр" in norm || norm.contains(Regex("50\\s*лет\\s*\\d")) || "50лет" in norm.replace(" ", ""))
         ) return "ЦЕНТР"
-        if (("трактор" in norm || "прт" in norm) && Regex("\\b16\\b").containsMatchIn(norm)) return "НЮР"
+        if (listOf("тракторостроител", "трактор", "трктор", "тракт", "прт").any { it in norm }) return "НЮР"
         if ("324" in norm && ("стрелк" in norm || "дивиз" in norm)) return "НЮР"
-        if (("универ" in norm || "университетская" in norm) &&
-            ("38/2" in norm || "38к2" in norm || "38 к2" in norm)
-        ) return "СЗР"
+        if ("универ" in norm || "университетская" in norm) return "СЗР"
+        if ("пионер" in norm || "пиорер" in norm) return "НЧК"
+        if ("крутов" in norm) return "НЧК"
+        if ("обиков" in norm) return "НЮР"
+        if ("спиридон" in norm || "михайлов" in norm) return "СЗР"
         if ("газировка" in norm) return "НЮР"
         if ("кома" in norm && ("лен" in norm || Regex("\\d").containsMatchIn(norm))) return "НЮР"
         if (Regex("лен(инского)?\\s*ком").containsMatchIn(norm)) return "НЮР"
+        if ("винокуров" in norm) return "НЧК"
 
         if (norm in ADDRESS_INDEX) return ADDRESS_INDEX[norm]
 
@@ -209,8 +212,16 @@ object ListProcessor {
     }
 
     private fun parsePersonLine(line: String): Pair<String?, String?> {
-        val trimmed = line.trim()
+        var trimmed = line.trim()
         if (trimmed.isEmpty()) return null to null
+        val dotName = Regex("""^([А-Яа-яЁёA-Za-z]{2,12})\.(\S.+)$""").find(trimmed)
+        if (dotName != null) {
+            val n = dotName.groupValues[1]
+            var a = dotName.groupValues[2]
+            a = a.replace(Regex("""([А-Яа-яЁёA-Za-z])(\d)"""), "$1 $2")
+            return n to a
+        }
+        trimmed = trimmed.replace(Regex("""([А-Яа-яЁёA-Za-z])(\d)"""), "$1 $2")
 
         val splitRegex = Regex("\\s*[-–—:]\\s*")
         if (splitRegex.containsMatchIn(trimmed)) {
@@ -470,6 +481,17 @@ object ListProcessor {
                 addressClean = addressClean.replace(Regex("(?i)лен\\s*кома"), "ленинского комсомола")
                 addressClean = addressClean.replace(Regex("(?i)\\bкома\\s*(\\d+)"), "ленинского комсомола $1")
                 addressClean = addressClean.replace(Regex("(?i)\\bкома(\\d+)"), "ленинского комсомола $1")
+                addressClean = addressClean.replace(Regex("(?i)\\bтрктор\\b"), "тракторостроителей")
+                addressClean = addressClean.replace(Regex("(?i)\\bтракт\\.?\\b"), "тракторостроителей")
+                addressClean = addressClean.replace(Regex("(?i)\\bтрактор\\b"), "тракторостроителей")
+                addressClean = addressClean.replace(Regex("(?i)\\bпрт\\.?\\b"), "тракторостроителей")
+                addressClean = addressClean.replace(Regex("(?i)\\bунивер\\b"), "университетская")
+                addressClean = addressClean.replace(Regex("(?i)\\bпиорер\\b"), "пионерская")
+                addressClean = addressClean.replace(Regex("(?i)\\bпионер\\b(?!ская)"), "пионерская")
+                addressClean = addressClean.replace(Regex("(?i)\\bкрутова\\b"), "жени крутовой")
+                addressClean = addressClean.replace(Regex("(?i)\\bкрутовой\\b"), "жени крутовой")
+                addressClean = addressClean.replace(Regex("(?i)\\b(\\d+)\\s*/\\s*(\\d+)\\b"), "$1к$2")
+                addressClean = addressClean.replace(Regex("([А-Яа-яЁёA-Za-z])(\\d)"), "$1 $2")
                 addressClean = addressClean.replace(Regex("[\\p{So}\\p{Cn}\\p{Cs}\\p{Sk}]+"), "") 
                 addressClean = addressClean.replace(Regex("чебоксары[,\\s]*", RegexOption.IGNORE_CASE), "").trim()
                 addressClean = addressClean.replace(Regex("\\s*\\([^)]*(?:чел|своим|факт|скорее)[^)]*\\)?\\s*", RegexOption.IGNORE_CASE), " ").trim()
@@ -489,6 +511,12 @@ object ListProcessor {
                     district = when {
                         "кугеси" in rawNorm -> "КУГЕСИ"
                         "винокуров" in rawNorm -> "НЧК"
+                        "крутов" in rawNorm -> "НЧК"
+                        "пионер" in rawNorm || "пиорер" in rawNorm -> "НЧК"
+                        "обиков" in rawNorm -> "НЮР"
+                        listOf("трактор", "трктор", "тракт", "прт", "тракторостроител").any { it in rawNorm } -> "НЮР"
+                        "универ" in rawNorm -> "СЗР"
+                        "спиридон" in rawNorm || "михайлов" in rawNorm -> "СЗР"
                         else -> null
                     }
                 }

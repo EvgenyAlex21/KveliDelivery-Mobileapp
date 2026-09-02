@@ -83,6 +83,9 @@ fun KveliDeliveryApp(viewModel: AppViewModel = viewModel()) {
                         onUpdatePerson = { id, name, address, district, role, timeGroup ->
                             viewModel.updatePerson(id, name, address, district, role, timeGroup)
                         },
+                        onAddPerson = { name, address, district, role, timeGroup ->
+                            viewModel.addPerson(name, address, district, role, timeGroup)
+                        },
                         onFinish = { viewModel.finishTrip() }
                     )
                 }

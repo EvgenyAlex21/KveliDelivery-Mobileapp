@@ -242,6 +242,33 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         persist()
     }
 
+    fun addPerson(
+        name: String?,
+        address: String,
+        district: String?,
+        role: String?,
+        timeGroup: String
+    ) {
+        val addr = address.trim()
+        if (addr.isBlank()) return
+        val clampedTime = ListProcessor.clampSlotToAllowed(timeGroup, extendedSlots)
+        val resolvedDistrict = district?.takeIf { it.isNotBlank() }
+            ?: ListProcessor.findDistrict(addr)
+        val person = Person(
+            id = java.util.UUID.randomUUID().toString(),
+            name = name?.takeIf { it.isNotBlank() },
+            address = addr,
+            district = resolvedDistrict,
+            role = role?.takeIf { it.isNotBlank() },
+            timeGroup = clampedTime,
+            raw = listOfNotNull(name?.takeIf { it.isNotBlank() }, addr).joinToString(" - "),
+            orderIndex = (people.maxOfOrNull { it.orderIndex } ?: -1) + 1
+        )
+        people = people + person
+        rebuildStructured()
+        persist()
+    }
+
     fun reorderPerson(personId: String, direction: Int) {
         val person = people.find { it.id == personId } ?: return
         val group = people

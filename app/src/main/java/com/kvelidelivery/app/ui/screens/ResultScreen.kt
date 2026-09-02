@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ExpandLess
@@ -59,12 +60,14 @@ fun ResultScreen(
     onMoveToTimeSlot: (String, String) -> Unit,
     onReorder: (String, Int) -> Unit,
     onUpdatePerson: (String, String?, String, String?, String?, String) -> Unit,
+    onAddPerson: (String?, String, String?, String?, String) -> Unit,
     onFinish: () -> Unit
 ) {
     var expandedDrivers by remember { mutableStateOf(setOf(selectedDriver.number)) }
     var movePerson by remember { mutableStateOf<Person?>(null) }
     var reorderPersonId by remember { mutableStateOf<String?>(null) }
     var editPerson by remember { mutableStateOf<Person?>(null) }
+    var showAddPerson by remember { mutableStateOf(false) }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
@@ -94,6 +97,15 @@ fun ResultScreen(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { showAddPerson = true },
+                containerColor = PrimaryBlue,
+                contentColor = Color.White
+            ) {
+                Icon(Icons.Rounded.Add, contentDescription = "Добавить человека")
+            }
         },
         bottomBar = {
             Surface(
@@ -278,6 +290,18 @@ fun ResultScreen(
                 onUpdatePerson(person.id, name, address, district, role, timeGroup)
                 editPerson = null
                 reorderPersonId = null
+            }
+        )
+    }
+
+    if (showAddPerson) {
+        AddPersonDialog(
+            timeSlots = timeSlots,
+            defaultTime = timeSlots.lastOrNull() ?: "23:00",
+            onDismiss = { showAddPerson = false },
+            onSave = { name, address, district, role, timeGroup ->
+                onAddPerson(name, address, district, role, timeGroup)
+                showAddPerson = false
             }
         )
     }
@@ -833,6 +857,208 @@ private fun EditPersonDialog(
                 enabled = address.isNotBlank()
             ) {
                 Text("Сохранить")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Отмена")
+            }
+        }
+    )
+}
+
+
+@Composable
+private fun AddPersonDialog(
+    timeSlots: List<String>,
+    defaultTime: String,
+    onDismiss: () -> Unit,
+    onSave: (name: String?, address: String, district: String?, role: String?, timeGroup: String) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var address by remember { mutableStateOf("") }
+    var district by remember { mutableStateOf("") }
+    var role by remember { mutableStateOf("") }
+    var timeGroup by remember { mutableStateOf(defaultTime) }
+
+    val districts = listOf(
+        "СЗР", "ЮЗР", "БОГДАНКА", "ЦЕНТР", "НОВЫЙ", "НЧК", "НЮР", "КУГЕСИ"
+    )
+    val roles = listOf("клин", "дост", "хост", "бар", "кар", "кух", "офф", "офф-ран")
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                "Добавить человека",
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Имя") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = address,
+                    onValueChange = { address = it },
+                    label = { Text("Адрес") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = role,
+                    onValueChange = { role = it },
+                    label = { Text("Роль (клин, дост, хост, бар…)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    "Роль (быстрый выбор)",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    roles.take(4).forEach { r ->
+                        FilterChip(
+                            selected = role == r,
+                            onClick = { role = r },
+                            label = {
+                                Text(
+                                    r,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = TextAlign.Center
+                                )
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = PrimaryBlue,
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                    }
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    roles.drop(4).forEach { r ->
+                        FilterChip(
+                            selected = role == r,
+                            onClick = { role = r },
+                            label = {
+                                Text(
+                                    r,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = TextAlign.Center
+                                )
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = PrimaryBlue,
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                    }
+                    repeat(4 - roles.drop(4).size) {
+                        Spacer(Modifier.weight(1f))
+                    }
+                }
+                Text(
+                    "Район",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                districts.chunked(4).forEach { row ->
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        row.forEach { d ->
+                            FilterChip(
+                                selected = district == d,
+                                onClick = { district = d },
+                                label = {
+                                    Text(
+                                        d,
+                                        fontSize = 11.sp,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = TextAlign.Center
+                                    )
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = PrimaryBlue,
+                                    selectedLabelColor = Color.White
+                                )
+                            )
+                        }
+                        repeat(4 - row.size) {
+                            Spacer(Modifier.weight(1f))
+                        }
+                    }
+                }
+                Text(
+                    "Слот",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    timeSlots.forEach { slot ->
+                        FilterChip(
+                            selected = timeGroup == slot,
+                            onClick = { timeGroup = slot },
+                            label = {
+                                Text(
+                                    slot,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = TextAlign.Center
+                                )
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = PrimaryBlue,
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (address.isNotBlank()) {
+                        onSave(
+                            name.ifBlank { null },
+                            address.trim(),
+                            district.ifBlank { null },
+                            role.ifBlank { null },
+                            timeGroup
+                        )
+                    }
+                },
+                enabled = address.isNotBlank()
+            ) {
+                Text("Добавить")
             }
         },
         dismissButton = {
