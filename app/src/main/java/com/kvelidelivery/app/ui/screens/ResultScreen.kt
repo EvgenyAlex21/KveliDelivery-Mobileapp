@@ -884,7 +884,6 @@ private fun AddPersonDialog(
     val districts = listOf(
         "СЗР", "ЮЗР", "БОГДАНКА", "ЦЕНТР", "НОВЫЙ", "НЧК", "НЮР", "КУГЕСИ"
     )
-    val roles = listOf("клин", "дост", "хост", "бар", "кар", "кух", "офф", "офф-ран")
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -918,66 +917,10 @@ private fun AddPersonDialog(
                 OutlinedTextField(
                     value = role,
                     onValueChange = { role = it },
-                    label = { Text("Роль (клин, дост, хост, бар…)") },
+                    label = { Text("Роль (клин, офф, бар…)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Text(
-                    "Роль (быстрый выбор)",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    roles.take(4).forEach { r ->
-                        FilterChip(
-                            selected = role == r,
-                            onClick = { role = r },
-                            label = {
-                                Text(
-                                    r,
-                                    fontSize = 11.sp,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    textAlign = TextAlign.Center
-                                )
-                            },
-                            modifier = Modifier.weight(1f),
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = PrimaryBlue,
-                                selectedLabelColor = Color.White
-                            )
-                        )
-                    }
-                }
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    roles.drop(4).forEach { r ->
-                        FilterChip(
-                            selected = role == r,
-                            onClick = { role = r },
-                            label = {
-                                Text(
-                                    r,
-                                    fontSize = 11.sp,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    textAlign = TextAlign.Center
-                                )
-                            },
-                            modifier = Modifier.weight(1f),
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = PrimaryBlue,
-                                selectedLabelColor = Color.White
-                            )
-                        )
-                    }
-                    repeat(4 - roles.drop(4).size) {
-                        Spacer(Modifier.weight(1f))
-                    }
-                }
                 Text(
                     "Район",
                     style = MaterialTheme.typography.labelMedium,
