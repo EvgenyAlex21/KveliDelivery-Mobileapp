@@ -35,6 +35,8 @@ object ListProcessor {
         return index
     }
 
+    private val SLOT_ORDER = listOf("22:00", "23:00", "00:00", "01:00")
+
     fun getTimeSlots(extended: Boolean = false): List<String> {
         if (extended) return listOf("22:00", "23:00", "00:00", "01:00")
         val weekday = LocalDateTime.now().dayOfWeek
@@ -57,9 +59,22 @@ object ListProcessor {
         else -> null
     }
 
-    fun clampSlotToAllowed(slot: String?, extended: Boolean): String {
-        val allowed = getTimeSlots(extended)
-        if (slot.isNullOrBlank()) return getDefaultMainTime(extended)
+    /** Слоты для активной поездки: настройки + уже встречающиеся у людей (не сжимаются после полуночи). */
+    fun getEffectiveTimeSlots(extended: Boolean, peopleSlots: Collection<String> = emptyList()): List<String> {
+        val base = getTimeSlots(extended)
+        val extra = peopleSlots.filter { it in SLOT_ORDER }
+        return (base + extra)
+            .distinct()
+            .sortedBy { SLOT_ORDER.indexOf(it).let { i -> if (i < 0) 100 else i } }
+    }
+
+    fun clampSlotToAllowed(
+        slot: String?,
+        extended: Boolean,
+        peopleSlots: Collection<String> = emptyList()
+    ): String {
+        val allowed = getEffectiveTimeSlots(extended, peopleSlots)
+        if (slot.isNullOrBlank()) return allowed.last()
         if (slot in allowed) return slot
         return allowed.last()
     }
@@ -106,11 +121,18 @@ object ListProcessor {
         if ("пионер" in norm || "пиорер" in norm) return "НЧК"
         if ("крутов" in norm) return "НЧК"
         if ("обиков" in norm) return "НЮР"
-        if ("спиридон" in norm || "михайлов" in norm) return "СЗР"
+        if ("спиридон" in norm || "мишаня" in norm || "михайлов" in norm) return "СЗР"
         if ("газировка" in norm) return "НЮР"
         if ("кома" in norm && ("лен" in norm || Regex("\\d").containsMatchIn(norm))) return "НЮР"
         if (Regex("лен(инского)?\\s*ком").containsMatchIn(norm)) return "НЮР"
         if ("винокуров" in norm) return "НЧК"
+        if ("тукташ" in norm) return "ЦЕНТР"
+        if ("болгарстро" in norm || "болгар" in norm) return "НЮР"
+        if ("пролетар" in norm) return "НЮР"
+        if ("ривер" in norm) return "ЦЕНТР"
+        if ("деловой" in norm || ("республик" in norm && "центр" in norm)) return "ЦЕНТР"
+        if ("московк" in norm || "московский" in norm) return "СЗР"
+        if ("граждан" in norm || "гражд" in norm) return "ЮЗР"
 
         if (norm in ADDRESS_INDEX) return ADDRESS_INDEX[norm]
 
@@ -297,6 +319,14 @@ object ListProcessor {
             "хостес" to "хост",
             "хост" to "хост",
             "офики" to "офф",
+            "официант" to "офф",
+            "официанты" to "офф",
+            "офницы" to "офф",
+            "офники" to "офф",
+            "офисы" to "офф",
+            "офис" to "офф",
+            "дети хинкали" to "офф",
+            "хинкали" to "офф",
             "вип" to "офф",
             "бар" to "бар"
         )
@@ -339,7 +369,7 @@ object ListProcessor {
             if (roleFound != null) {
                 currentRole = roleFound
                 var line2 = line.replace(
-                    Regex("(?:клининг|развоз|раннер|ранеры|караоке|доставка|кухня|хостес|хост|офики|вип|бар)\\s*:?\\s*", RegexOption.IGNORE_CASE),
+                    Regex("(?:клининг|развоз|раннер|ранеры|караоке|доставка|кухня|хостес|хост|офики|официанты|официант|офницы|офники|офисы|офис|вип|бар)\\s*:?\\s*", RegexOption.IGNORE_CASE),
                     " "
                 )
                 line2 = line2.replace(Regex("\\s+"), " ").trim()
@@ -377,6 +407,7 @@ object ListProcessor {
                     "клининг" in n -> "клин"
                     "кухн" in n -> "кух"
                     "хостес" in n || n.trim() == "хост" -> "хост"
+                    "офниц" in n || "офник" in n || "официант" in n || "офик" in n || "офис" in n || "хинкал" in n -> "офф"
                     "бар" in n -> "бар"
                     "караоке" in n -> "кар"
                     "доставк" in n -> "дост"
@@ -386,7 +417,7 @@ object ListProcessor {
             }
             run {
                 val mRole = Regex(
-                    """(?i)^(?:[А-Яа-яЁёA-Za-z][А-Яа-яЁёA-Za-z0-9_.]*)\s*:\s*(клининг|развоз|раннер|ранеры|караоке|доставка|кухня|хостес|хост|офики|вип|бар)\s*$"""
+                    """(?i)^(?:[А-Яа-яЁёA-Za-z][А-Яа-яЁёA-Za-z0-9_.]*)\s*:\s*(клининг|развоз|раннер|ранеры|караоке|доставка|кухня|хостес|хост|офики|официанты|официант|офницы|офники|офисы|офис|вип|бар)\s*$"""
                 ).find(line.trim())
                 if (mRole != null) {
                     val rk = mRole.groupValues[1].lowercase().replace('ё', 'е')
@@ -395,6 +426,7 @@ object ListProcessor {
                         "клининг" in rk -> "клин"
                         "кухн" in rk -> "кух"
                         "хост" in rk -> "хост"
+                        "офниц" in rk || "офник" in rk || "официант" in rk || "офик" in rk || "офис" in rk || "хинкал" in rk -> "офф"
                         "бар" in rk -> "бар"
                         "караоке" in rk || rk == "кар" -> "кар"
                         "доставк" in rk -> "дост"
@@ -486,6 +518,14 @@ object ListProcessor {
                 addressClean = addressClean.replace(Regex("(?i)\\bтрактор\\b"), "тракторостроителей")
                 addressClean = addressClean.replace(Regex("(?i)\\bпрт\\.?\\b"), "тракторостроителей")
                 addressClean = addressClean.replace(Regex("(?i)\\bунивер\\b"), "университетская")
+                addressClean = addressClean.replace(Regex("(?i)\\bмосковкий\\b"), "московский проспект")
+                addressClean = addressClean.replace(Regex("(?i)\\bмосковский\\b(?!\\s*проспект)"), "московский проспект")
+                addressClean = addressClean.replace(Regex("(?i)\\bмишаня\\b"), "михайлова")
+                addressClean = addressClean.replace(Regex("(?i)спиридон\\s+мишаня"), "спиридона михайлова")
+                addressClean = addressClean.replace(Regex("(?i)\\bтукташ[аыу]?\\b"), "тукташа")
+                addressClean = addressClean.replace(Regex("(?i)\\bболгарстроя\\b"), "болгарстроя")
+                addressClean = addressClean.replace(Regex("(?i)деловой\\s*центр\\s*республики"), "деловой центр республики")
+                addressClean = addressClean.replace(Regex("(?i)(\\d+)\\s*к\\s*(\\d+)"), "$1к$2")
                 addressClean = addressClean.replace(Regex("(?i)\\bпиорер\\b"), "пионерская")
                 addressClean = addressClean.replace(Regex("(?i)\\bпионер\\b(?!ская)"), "пионерская")
                 addressClean = addressClean.replace(Regex("(?i)\\bкрутова\\b"), "жени крутовой")
@@ -515,14 +555,18 @@ object ListProcessor {
                         "пионер" in rawNorm || "пиорер" in rawNorm -> "НЧК"
                         "обиков" in rawNorm -> "НЮР"
                         listOf("трактор", "трктор", "тракт", "прт", "тракторостроител").any { it in rawNorm } -> "НЮР"
-                        "универ" in rawNorm -> "СЗР"
-                        "спиридон" in rawNorm || "михайлов" in rawNorm -> "СЗР"
+                        "болгар" in rawNorm || "пролетар" in rawNorm -> "НЮР"
+                        "универ" in rawNorm || "московк" in rawNorm -> "СЗР"
+                        "спиридон" in rawNorm || "мишаня" in rawNorm || "михайлов" in rawNorm -> "СЗР"
+                        "тукташ" in rawNorm || "ривер" in rawNorm || "деловой" in rawNorm -> "ЦЕНТР"
+                        "граждан" in rawNorm || "гражд" in rawNorm -> "ЮЗР"
                         else -> null
                     }
                 }
 
                 var nPeople = 1
-                val mN = Regex("(\\d+)\\s*чел", RegexOption.IGNORE_CASE).find(normalize(rawP))
+                val mN = Regex("(\\d+)\\s*чел\\.?", RegexOption.IGNORE_CASE).find(normalize(rawP))
+                    ?: Regex("(\\d+)\\s*чел\\.?", RegexOption.IGNORE_CASE).find(normalize(address))
                 if (mN != null) {
                     nPeople = max(1, mN.groupValues[1].toIntOrNull() ?: 1)
                 } else {
@@ -533,11 +577,24 @@ object ListProcessor {
                     }
                 }
 
-                for (i in 0 until nPeople) {
+                val nameList = if (!name.isNullOrBlank() && ("," in name || " и " in name.lowercase())) {
+                    name.split(Regex("\\s*,\\s*|\\s+и\\s+", RegexOption.IGNORE_CASE))
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() }
+                } else {
+                    listOf(name)
+                }
+                val copies = max(nPeople, nameList.size)
+                for (i in 0 until copies) {
+                    val nm = when {
+                        nameList.size > 1 -> nameList.getOrNull(i)
+                        nPeople > 1 && name == null -> null
+                        else -> name
+                    }
                     people.add(
                         Person(
                             id = UUID.randomUUID().toString(),
-                            name = if (nPeople > 1 && name == null) null else name,
+                            name = nm,
                             address = addressClean.ifBlank { address },
                             district = district,
                             role = currentRole,
@@ -608,6 +665,12 @@ object ListProcessor {
 
             val driverSections = mutableListOf<DriverSection>()
 
+            val forcedByDriver = slotPeople
+                .filter { it.assignedDriver != null && it.district != null }
+                .groupBy { it.assignedDriver!! }
+            val unassigned = slotPeople.filter { it.assignedDriver == null && it.district != null }
+            val unassignedGroups = groupByDistrict(unassigned)
+
             for (drv in driverOrder) {
                 val districtsForDriver = when (drv) {
                     Driver.ONE -> orderDriver1
@@ -617,15 +680,38 @@ object ListProcessor {
 
                 val districtGroups = mutableListOf<DistrictGroup>()
                 var total = 0
+                val usedIds = mutableSetOf<String>()
+
                 for (d in districtsForDriver) {
-                    val plist = groups[d]
-                    if (plist != null && plist.isNotEmpty()) {
+                    val plist = (unassignedGroups[d] ?: emptyList())
+                    if (plist.isNotEmpty()) {
                         val sorted = sortPeople(plist)
                         val activeCount = sorted.count { !it.isDelivered }
                         districtGroups.add(DistrictGroup(d, sorted, activeCount))
                         total += activeCount
+                        usedIds.addAll(sorted.map { it.id })
                     }
                 }
+
+                val forced = forcedByDriver[drv.number] ?: emptyList()
+                if (forced.isNotEmpty()) {
+                    val byDist = forced.groupBy { it.district ?: "НЕОПР" }
+                    for ((d, plist) in byDist) {
+                        val sorted = sortPeople(plist)
+                        val existing = districtGroups.indexOfFirst { it.district == d }
+                        if (existing >= 0) {
+                            val merged = sortPeople(districtGroups[existing].people + sorted)
+                            val activeCount = merged.count { !it.isDelivered }
+                            districtGroups[existing] = DistrictGroup(d, merged, activeCount)
+                            total = districtGroups.sumOf { it.activeCount }
+                        } else {
+                            val activeCount = sorted.count { !it.isDelivered }
+                            districtGroups.add(DistrictGroup(d, sorted, activeCount))
+                            total += activeCount
+                        }
+                    }
+                }
+
                 if (districtGroups.isNotEmpty()) {
                     driverSections.add(DriverSection(drv, districtGroups, total))
                 }

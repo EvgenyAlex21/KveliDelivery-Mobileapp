@@ -80,7 +80,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
 
     val timeSlots: List<String>
-        get() = ListProcessor.getTimeSlots(extendedSlots)
+        get() = ListProcessor.getEffectiveTimeSlots(
+            extendedSlots,
+            people.map { it.timeGroup }
+        )
 
     init {
         restoreSession()
@@ -155,6 +158,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
                 people = parsed
+                val hasNight = parsed.any { it.timeGroup in listOf("00:00", "01:00") }
+                val isWeekendNight = ListProcessor.getTimeSlots(false).size >= 4
+                if (hasNight || isWeekendNight || extendedSlots) {
+                    extendedSlots = true
+                }
                 rebuildStructured()
                 currentScreen = Screen.Result
                 persist()
@@ -181,19 +189,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun movePersonToDriver(personId: String, targetDriver: Driver) {
-        val targetDistricts = when (targetDriver) {
-            Driver.ONE -> listOf("СЗР", "ЮЗР")
-            Driver.TWO -> listOf("ЦЕНТР", "НОВЫЙ", "НЧК", "БОГДАНКА")
-            Driver.THREE -> listOf("НЮР", "КУГЕСИ", "БОГДАНКА")
-        }
         people = people.map {
             if (it.id == personId) {
-                val newDist = if (it.district in targetDistricts) it.district
-                else targetDistricts.firstOrNull() ?: it.district
-                it.copy(
-                    district = newDist ?: "СЗР",
-                    assignedDriver = targetDriver.number
-                )
+                it.copy(assignedDriver = targetDriver.number)
             } else it
         }
         rebuildStructured()
@@ -224,7 +222,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         role: String?,
         timeGroup: String
     ) {
-        val clampedTime = ListProcessor.clampSlotToAllowed(timeGroup, extendedSlots)
+        val clampedTime = ListProcessor.clampSlotToAllowed(
+            timeGroup,
+            extendedSlots,
+            people.map { it.timeGroup }
+        )
         val resolvedDistrict = district?.takeIf { it.isNotBlank() }
             ?: ListProcessor.findDistrict(address)
         people = people.map {
@@ -251,7 +253,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         val addr = address.trim()
         if (addr.isBlank()) return
-        val clampedTime = ListProcessor.clampSlotToAllowed(timeGroup, extendedSlots)
+        val clampedTime = ListProcessor.clampSlotToAllowed(
+            timeGroup,
+            extendedSlots,
+            people.map { it.timeGroup }
+        )
         val resolvedDistrict = district?.takeIf { it.isNotBlank() }
             ?: ListProcessor.findDistrict(addr)
         val person = Person(
