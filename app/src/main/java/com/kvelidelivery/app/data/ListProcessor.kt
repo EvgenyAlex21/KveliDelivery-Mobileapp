@@ -133,6 +133,13 @@ object ListProcessor {
         if ("деловой" in norm || ("республик" in norm && "центр" in norm)) return "ЦЕНТР"
         if ("московк" in norm || "московский" in norm) return "СЗР"
         if ("граждан" in norm || "гражд" in norm) return "ЮЗР"
+        if ("дементьев" in norm) return "БОГДАНКА"
+        if ("токарев" in norm) return "НОВЫЙ"
+        if ("рождественск" in norm) return "ЦЕНТР"
+        if ("миттов" in norm) return "ЮЗР"
+        if (norm == "нчк" || norm == "новичк" || norm == "нович" ||
+            norm.matches(Regex("^(нчк|новичк|нович)\\s*$"))
+        ) return "НЧК"
 
         if (norm in ADDRESS_INDEX) return ADDRESS_INDEX[norm]
 
@@ -526,6 +533,8 @@ object ListProcessor {
                 addressClean = addressClean.replace(Regex("(?i)\\bболгарстроя\\b"), "болгарстроя")
                 addressClean = addressClean.replace(Regex("(?i)деловой\\s*центр\\s*республики"), "деловой центр республики")
                 addressClean = addressClean.replace(Regex("(?i)(\\d+)\\s*к\\s*(\\d+)"), "$1к$2")
+                addressClean = addressClean.replace(Regex("(?i)(\\d+)\\s*,?\\s*корпус\\s*(\\d+)"), "$1к$2")
+                addressClean = addressClean.replace(Regex("(?i)\\bкорпус\\s*(\\d+)"), "к$1")
                 addressClean = addressClean.replace(Regex("(?i)\\bпиорер\\b"), "пионерская")
                 addressClean = addressClean.replace(Regex("(?i)\\bпионер\\b(?!ская)"), "пионерская")
                 addressClean = addressClean.replace(Regex("(?i)\\bкрутова\\b"), "жени крутовой")
@@ -536,13 +545,26 @@ object ListProcessor {
                 addressClean = addressClean.replace(Regex("чебоксары[,\\s]*", RegexOption.IGNORE_CASE), "").trim()
                 addressClean = addressClean.replace(Regex("\\s*\\([^)]*(?:чел|своим|факт|скорее)[^)]*\\)?\\s*", RegexOption.IGNORE_CASE), " ").trim()
                 addressClean = addressClean.replace(Regex("(?i)\\s*[xх]\\s*\\d+\b"), " ").trim()
-                addressClean = addressClean.replace(
-                    Regex("(?i)\\s*\b(кугеси|сзр|юзр|нюр|нчк|центр|новый|богданка)\b\\s*$"),
-                    ""
-                ).trim()
+                val pureDistrict = when (normalize(addressClean)) {
+                    "нчк", "новичк", "нович" -> "НЧК"
+                    "богданка" -> "БОГДАНКА"
+                    "кугеси" -> "КУГЕСИ"
+                    "сзр" -> "СЗР"
+                    "юзр" -> "ЮЗР"
+                    "нюр" -> "НЮР"
+                    "центр" -> "ЦЕНТР"
+                    "новый" -> "НОВЫЙ"
+                    else -> null
+                }
+                if (pureDistrict == null) {
+                    addressClean = addressClean.replace(
+                        Regex("(?i)\\s*\\b(кугеси|сзр|юзр|нюр|нчк|центр|новый|богданка)\\b\\s*$"),
+                        ""
+                    ).trim()
+                }
                 addressClean = addressClean.replace(Regex("\\s+"), " ").trim(' ', '.')
 
-                var district = findDistrict(addressClean)
+                var district = pureDistrict ?: findDistrict(addressClean)
                 if (district == null && listOf("богдан", "б.х", "бх").any { it in normalize(addressClean) }) {
                     district = "БОГДАНКА"
                 }
@@ -553,6 +575,11 @@ object ListProcessor {
                         "винокуров" in rawNorm -> "НЧК"
                         "крутов" in rawNorm -> "НЧК"
                         "пионер" in rawNorm || "пиорер" in rawNorm -> "НЧК"
+                        rawNorm == "нчк" || "новичк" in rawNorm || Regex("\\bнович\\b").containsMatchIn(rawNorm) -> "НЧК"
+                        "дементьев" in rawNorm -> "БОГДАНКА"
+                        "токарев" in rawNorm -> "НОВЫЙ"
+                        "рождественск" in rawNorm -> "ЦЕНТР"
+                        "миттов" in rawNorm -> "ЮЗР"
                         "обиков" in rawNorm -> "НЮР"
                         listOf("трактор", "трктор", "тракт", "прт", "тракторостроител").any { it in rawNorm } -> "НЮР"
                         "болгар" in rawNorm || "пролетар" in rawNorm -> "НЮР"
