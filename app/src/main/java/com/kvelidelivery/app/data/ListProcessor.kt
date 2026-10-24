@@ -136,7 +136,12 @@ object ListProcessor {
         if ("дементьев" in norm) return "БОГДАНКА"
         if ("токарев" in norm) return "НОВЫЙ"
         if ("рождественск" in norm) return "ЦЕНТР"
-        if ("миттов" in norm) return "ЮЗР"
+        if (Regex("мит+ов").containsMatchIn(norm)) return "ЮЗР"
+        if ("текстильщик" in norm) return "ЦЕНТР"
+        if ("маршак" in norm) return "ЦЕНТР"
+        if (("зелен" in norm || "зелён" in norm) &&
+            ("бульвар" in norm || Regex("\\bб\\.?\\s*зелен").containsMatchIn(norm) || Regex("\\d").containsMatchIn(norm))
+        ) return "НЧК"
         if (norm == "нчк" || norm == "новичк" || norm == "нович" ||
             norm.matches(Regex("^(нчк|новичк|нович)\\s*$"))
         ) return "НЧК"
@@ -324,7 +329,10 @@ object ListProcessor {
             "доставка" to "дост",
             "кухня" to "кух",
             "хостес" to "хост",
+            "хостушки" to "хост",
+            "хосты" to "хост",
             "хост" to "хост",
+            "милашки" to "хост",
             "офики" to "офф",
             "официант" to "офф",
             "официанты" to "офф",
@@ -376,7 +384,7 @@ object ListProcessor {
             if (roleFound != null) {
                 currentRole = roleFound
                 var line2 = line.replace(
-                    Regex("(?:клининг|развоз|раннер|ранеры|караоке|доставка|кухня|хостес|хост|офики|официанты|официант|офницы|офники|офисы|офис|вип|бар)\\s*:?\\s*", RegexOption.IGNORE_CASE),
+                    Regex("(?:клининг|развоз|раннер|ранеры|караоке|доставка|кухня|хостес|хостушки|хосты|хост|милашки|офики|официанты|официант|офницы|офники|офисы|офис|вип|бар)\\s*:?\\s*", RegexOption.IGNORE_CASE),
                     " "
                 )
                 line2 = line2.replace(Regex("\\s+"), " ").trim()
@@ -407,13 +415,18 @@ object ListProcessor {
             }
 
             if (line.endsWith(":") && line.length < 40) continue
-            if (line.matches(Regex("^(\\d+\\s*(т|эт|этаж|терраса)|ранер|ранеры|клининг|развоз|кухня|хостес|бар|караоке|доставка|офики|вип)\\s*:?\\s*$", RegexOption.IGNORE_CASE))) {
+            if (line.matches(Regex("^(\\d+\\s*(т|эт|этаж|терраса)|ранер|ранеры|клининг|развоз|кухня|хостес|хостушки|хосты|хост|милашки|бар|караоке|доставка|офики|вип)\\s*:?\\s*$", RegexOption.IGNORE_CASE)) ||
+                normalize(line).let { n ->
+                    n in listOf("хост", "хосты", "хостес", "хостушки", "милашки") ||
+                        (n.contains("хост") && n.length < 40 && !n.any { it.isDigit() })
+                }
+            ) {
                 val n = normalize(line)
                 currentRole = when {
                     "ран" in n -> "офф-ран"
                     "клининг" in n -> "клин"
                     "кухн" in n -> "кух"
-                    "хостес" in n || n.trim() == "хост" -> "хост"
+                    "хост" in n || "милаш" in n -> "хост"
                     "офниц" in n || "офник" in n || "официант" in n || "офик" in n || "офис" in n || "хинкал" in n -> "офф"
                     "бар" in n -> "бар"
                     "караоке" in n -> "кар"
@@ -424,7 +437,7 @@ object ListProcessor {
             }
             run {
                 val mRole = Regex(
-                    """(?i)^(?:[А-Яа-яЁёA-Za-z][А-Яа-яЁёA-Za-z0-9_.]*)\s*:\s*(клининг|развоз|раннер|ранеры|караоке|доставка|кухня|хостес|хост|офики|официанты|официант|офницы|офники|офисы|офис|вип|бар)\s*$"""
+                    """(?i)^(?:[А-Яа-яЁёA-Za-z][А-Яа-яЁёA-Za-z0-9_.]*)\s*:\s*(клининг|развоз|раннер|ранеры|караоке|доставка|кухня|хостес|хостушки|хосты|хост|милашки|офики|официанты|официант|офницы|офники|офисы|офис|вип|бар)\s*$"""
                 ).find(line.trim())
                 if (mRole != null) {
                     val rk = mRole.groupValues[1].lowercase().replace('ё', 'е')
@@ -492,7 +505,7 @@ object ListProcessor {
                 val addrNorm = normalize(address)
                 if (addrNorm.length < 2) continue
                 if (addrNorm.matches(Regex("^(до\\s*)?\\d{1,2}(:\\d{2})?$"))) continue
-                if (addrNorm in listOf("клининг", "развоз", "кухня", "хостес", "хост", "бар", "караоке", "доставка", "ранеры", "ранер", "офики", "вип", "терраса", "этаж")) continue
+                if (addrNorm in listOf("клининг", "развоз", "кухня", "хостес", "хостушки", "хосты", "хост", "милашки", "бар", "караоке", "доставка", "ранеры", "ранер", "офики", "вип", "терраса", "этаж")) continue
                 if (listOf("добрый вечер", "добрый день", "привет", "здравствуй", "как дела").any { it in addrNorm }) continue
                 if (listOf("добрый вечер", "добрый день", "привет").any { it in normalize(rawP) }) continue
 
@@ -539,6 +552,13 @@ object ListProcessor {
                 addressClean = addressClean.replace(Regex("(?i)\\bпионер\\b(?!ская)"), "пионерская")
                 addressClean = addressClean.replace(Regex("(?i)\\bкрутова\\b"), "жени крутовой")
                 addressClean = addressClean.replace(Regex("(?i)\\bкрутовой\\b"), "жени крутовой")
+                addressClean = addressClean.replace(Regex("(?i)\\bмитова\\b"), "миттова")
+                addressClean = addressClean.replace(Regex("(?i)ост\\.?\\s*митова"), "остановка миттова")
+                addressClean = addressClean.replace(Regex("(?i)ост\\.?\\s*миттова"), "остановка миттова")
+                addressClean = addressClean.replace(Regex("(?i)рождественнского"), "рождественского")
+                addressClean = addressClean.replace(Regex("(?i)\\bб\\.?\\s*зелён?ый\\b"), "бульвар зеленый")
+                addressClean = addressClean.replace(Regex("(?i)бульвар\\s+зелён?ый"), "бульвар зеленый")
+                addressClean = addressClean.replace(Regex("(?i)(\\d+)\\s*а\\b"), "$1а")
                 addressClean = addressClean.replace(Regex("(?i)\\b(\\d+)\\s*/\\s*(\\d+)\\b"), "$1к$2")
                 addressClean = addressClean.replace(Regex("([А-Яа-яЁёA-Za-z])(\\d)"), "$1 $2")
                 addressClean = addressClean.replace(Regex("[\\p{So}\\p{Cn}\\p{Cs}\\p{Sk}]+"), "") 
@@ -579,7 +599,11 @@ object ListProcessor {
                         "дементьев" in rawNorm -> "БОГДАНКА"
                         "токарев" in rawNorm -> "НОВЫЙ"
                         "рождественск" in rawNorm -> "ЦЕНТР"
-                        "миттов" in rawNorm -> "ЮЗР"
+                        Regex("мит+ов").containsMatchIn(rawNorm) -> "ЮЗР"
+                        "текстильщик" in rawNorm -> "ЦЕНТР"
+                        "маршак" in rawNorm -> "ЦЕНТР"
+                        (("зелен" in rawNorm || "зелён" in rawNorm) &&
+                            ("бульвар" in rawNorm || "б." in rawNorm || Regex("\\d").containsMatchIn(rawNorm))) -> "НЧК"
                         "обиков" in rawNorm -> "НЮР"
                         listOf("трактор", "трктор", "тракт", "прт", "тракторостроител").any { it in rawNorm } -> "НЮР"
                         "болгар" in rawNorm || "пролетар" in rawNorm -> "НЮР"
