@@ -31,7 +31,9 @@ fun DriverSelectScreen(
     timeSlots: List<String>,
     extendedSlots: Boolean,
     onExtendedSlotsChange: (Boolean) -> Unit,
-    onSelect: (Driver) -> Unit
+    onSelect: (Driver) -> Unit,
+    employeeBaseCount: Int = 0,
+    onExportEmployeeBase: (() -> Unit)? = null
 ) {
     Column(
         modifier = Modifier
@@ -176,6 +178,22 @@ fun DriverSelectScreen(
             Driver.entries.forEach { driver ->
                 DriverCard(driver = driver, onClick = { onSelect(driver) })
                 Spacer(Modifier.height(12.dp))
+            }
+
+            if (onExportEmployeeBase != null) {
+                Spacer(Modifier.height(16.dp))
+                OutlinedButton(
+                    onClick = onExportEmployeeBase,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Text(
+                        if (employeeBaseCount > 0)
+                            "База сотрудников ($employeeBaseCount) в Excel"
+                        else
+                            "База сотрудников (пуста)"
+                    )
+                }
             }
 
             Spacer(Modifier.height(24.dp))

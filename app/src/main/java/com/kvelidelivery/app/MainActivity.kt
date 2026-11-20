@@ -34,6 +34,20 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun KveliDeliveryApp(viewModel: AppViewModel = viewModel()) {
+    val updateInfo = viewModel.updateAvailable
+    if (viewModel.updateDialogVisible && updateInfo != null) {
+        UpdateDialog(
+            info = updateInfo,
+            currentVersionLabel = viewModel.appVersionLabel,
+            downloading = viewModel.updateDownloading,
+            progress = viewModel.updateProgress,
+            error = viewModel.updateError,
+            onDownload = { viewModel.startDownloadUpdate() },
+            onSkip = { viewModel.skipUpdate() },
+            onDismissError = { viewModel.dismissUpdateError() }
+        )
+    }
+
     AnimatedContent(
         targetState = viewModel.currentScreen,
         transitionSpec = {
@@ -48,7 +62,9 @@ fun KveliDeliveryApp(viewModel: AppViewModel = viewModel()) {
                 timeSlots = viewModel.timeSlots,
                 extendedSlots = viewModel.extendedSlots,
                 onExtendedSlotsChange = { viewModel.updateExtendedSlots(it) },
-                onSelect = { viewModel.selectDriver(it) }
+                onSelect = { viewModel.selectDriver(it) },
+                employeeBaseCount = viewModel.employeeBaseCount,
+                onExportEmployeeBase = { viewModel.exportEmployeeBase() }
             )
             is Screen.InputList -> {
                 val driver = viewModel.selectedDriver

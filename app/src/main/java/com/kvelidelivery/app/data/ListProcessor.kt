@@ -9,6 +9,10 @@ object ListProcessor {
 
     private val ADDRESS_INDEX: Map<String, String> by lazy { buildAddressIndex() }
 
+    /** Опциональная база сотрудников для уточнения районов */
+    @Volatile
+    var employeeStore: EmployeeStore? = null
+
     private fun normalize(text: String?): String {
         if (text.isNullOrBlank()) return ""
         var t = text.lowercase().trim()
@@ -133,6 +137,9 @@ object ListProcessor {
         if ("деловой" in norm || ("республик" in norm && "центр" in norm)) return "ЦЕНТР"
         if ("московк" in norm || "московский" in norm) return "СЗР"
         if ("граждан" in norm || "гражд" in norm) return "ЮЗР"
+        if ("коллективн" in norm) return "ЮЗР"
+        if ("грасис" in norm) return "ЮЗР"
+        if (("9" in norm || "девятой" in norm) && ("пят" in norm || "пятилет" in norm)) return "НЮР"
         if ("дементьев" in norm) return "БОГДАНКА"
         if ("токарев" in norm) return "НОВЫЙ"
         if ("рождественск" in norm) return "ЦЕНТР"
@@ -188,6 +195,9 @@ object ListProcessor {
         if ("неон" in norm) return "СЗР"
         if ("газировка" in norm) return "НЮР"
         if ("кома" in norm && ("лен" in norm || Regex("\\d").containsMatchIn(norm))) return "НЮР"
+
+        employeeStore?.findDistrictByKnown(null, addressStr)?.let { return it }
+
         return null
     }
 
@@ -555,6 +565,12 @@ object ListProcessor {
                 addressClean = addressClean.replace(Regex("(?i)\\bмитова\\b"), "миттова")
                 addressClean = addressClean.replace(Regex("(?i)ост\\.?\\s*митова"), "остановка миттова")
                 addressClean = addressClean.replace(Regex("(?i)ост\\.?\\s*миттова"), "остановка миттова")
+                addressClean = addressClean.replace(Regex("(?i)9\\s*пят\\.?\\s*15"), "9 пятилетки 15")
+                addressClean = addressClean.replace(Regex("(?i)9й?\\s*пятилетки\\s*15"), "9 пятилетки 15")
+                addressClean = addressClean.replace(Regex("(?i)проспект\\s*9[-й]*\\s*пятилетки\\s*15"), "9 пятилетки 15")
+                addressClean = addressClean.replace(Regex("(?i)грасиса\\s*6\\s*к\\s*2"), "грасиса 6к2")
+                addressClean = addressClean.replace(Regex("(?i)грасиса\\s*6к\\s*2"), "грасиса 6к2")
+                addressClean = addressClean.replace(Regex("(?i)коллективная\\s*2"), "коллективная 2")
                 addressClean = addressClean.replace(Regex("(?i)рождественнского"), "рождественского")
                 addressClean = addressClean.replace(Regex("(?i)\\bб\\.?\\s*зелён?ый\\b"), "бульвар зеленый")
                 addressClean = addressClean.replace(Regex("(?i)бульвар\\s+зелён?ый"), "бульвар зеленый")
@@ -611,8 +627,15 @@ object ListProcessor {
                         "спиридон" in rawNorm || "мишаня" in rawNorm || "михайлов" in rawNorm -> "СЗР"
                         "тукташ" in rawNorm || "ривер" in rawNorm || "деловой" in rawNorm -> "ЦЕНТР"
                         "граждан" in rawNorm || "гражд" in rawNorm -> "ЮЗР"
+                        "коллективн" in rawNorm -> "ЮЗР"
+                        "грасис" in rawNorm -> "ЮЗР"
+                        (("9" in rawNorm || "девятой" in rawNorm) && ("пят" in rawNorm || "пятилет" in rawNorm)) -> "НЮР"
                         else -> null
                     }
+                }
+                if (district == null) {
+                    district = employeeStore?.findDistrictByKnown(name, addressClean)
+                        ?: employeeStore?.findDistrictByKnown(name, address)
                 }
 
                 var nPeople = 1

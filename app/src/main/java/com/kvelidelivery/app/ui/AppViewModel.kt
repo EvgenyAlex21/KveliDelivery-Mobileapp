@@ -6,13 +6,19 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import android.content.Intent
+import android.net.Uri
+import androidx.core.content.FileProvider
 import com.kvelidelivery.app.data.Driver
+import com.kvelidelivery.app.data.EmployeeStore
 import com.kvelidelivery.app.data.ListProcessor
 import com.kvelidelivery.app.data.Person
 import com.kvelidelivery.app.data.SessionStore
 import com.kvelidelivery.app.data.TimeSlotGroup
+import com.kvelidelivery.app.data.UpdateChecker
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.io.File
 
 sealed class Screen {
     data object Help : Screen()
@@ -46,8 +52,16 @@ sealed class Screen {
 class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val store = SessionStore(application)
+    private val employeeStore = EmployeeStore(application)
+    private val updateChecker = UpdateChecker(application)
 
     var currentScreen by mutableStateOf<Screen>(Screen.Help)
+        private set
+
+    var employeeBaseCount by mutableStateOf(0)
+        private set
+
+    var lastExportMessage by mutableStateOf<String?>(null)
         private set
 
     var selectedDriver by mutableStateOf<Driver?>(null)
@@ -71,6 +85,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     var extendedSlots by mutableStateOf(false)
         private set
 
+    var updateAvailable by mutableStateOf<UpdateChecker.UpdateInfo?>(null)
+        private set
+    var updateDialogVisible by mutableStateOf(false)
+        private set
+    var updateDownloading by mutableStateOf(false)
+        private set
+    var updateProgress by mutableStateOf(0)
+        private set
+    var updateError by mutableStateOf<String?>(null)
+        private set
+    var updateSkippedThisSession by mutableStateOf(false)
+        private set
+
     val todayDate: String
         get() {
             val now = java.time.LocalDateTime.now()
@@ -85,8 +112,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             people.map { it.timeGroup }
         )
 
+    val appVersionLabel: String
+        get() = "v${updateChecker.currentVersionName()} (${updateChecker.currentVersionCode()})"
+
     init {
+        ListProcessor.employeeStore = employeeStore
+        employeeBaseCount = employeeStore.count()
         restoreSession()
+        checkForUpdates()
     }
 
     private fun restoreSession() {
@@ -158,6 +191,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
                 people = parsed
+                employeeStore.recordPeople(parsed)
+                employeeBaseCount = employeeStore.count()
                 val hasNight = parsed.any { it.timeGroup in listOf("00:00", "01:00") }
                 val isWeekendNight = ListProcessor.getTimeSlots(false).size >= 4
                 if (hasNight || isWeekendNight || extendedSlots) {
@@ -240,6 +275,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
             } else it
         }
+        people.find { it.id == personId }?.let { employeeStore.recordPeople(listOf(it)) }
+        employeeBaseCount = employeeStore.count()
         rebuildStructured()
         persist()
     }
@@ -271,6 +308,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             orderIndex = (people.maxOfOrNull { it.orderIndex } ?: -1) + 1
         )
         people = people + person
+        employeeStore.recordPeople(listOf(person))
+        employeeBaseCount = employeeStore.count()
         rebuildStructured()
         persist()
     }
@@ -327,5 +366,109 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun resetToDriverSelect() {
         currentScreen = Screen.DriverSelect
         persist()
+    }
+
+    fun exportEmployeeBase(): Boolean {
+        lastExportMessage = null
+        val file = employeeStore.exportToExcel()
+        if (file == null || !file.exists()) {
+            lastExportMessage = if (employeeStore.count() == 0) {
+                "База сотрудников пуста"
+            } else {
+                "Не удалось создать файл Excel"
+            }
+            return false
+        }
+        return try {
+            val uri: Uri = try {
+                FileProvider.getUriForFile(
+                    getApplication(),
+                    "${getApplication<Application>().packageName}.fileprovider",
+                    file
+                )
+            } catch (_: Exception) {
+                Uri.fromFile(file)
+            }
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, "База сотрудников Квели")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            val chooser = Intent.createChooser(intent, "Сохранить / Открыть базу сотрудников")
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            getApplication<Application>().startActivity(chooser)
+            lastExportMessage = "Экспортировано: ${file.name} (${employeeStore.count()} записей)"
+            true
+        } catch (e: Exception) {
+            lastExportMessage = "Ошибка: ${e.message}"
+            false
+        }
+    }
+
+    fun clearExportMessage() {
+        lastExportMessage = null
+    }
+
+    fun checkForUpdates() {
+        if (updateSkippedThisSession) return
+        viewModelScope.launch {
+            when (val result = updateChecker.checkForUpdate()) {
+                is UpdateChecker.CheckResult.Available -> {
+                    updateAvailable = result.info
+                    updateDialogVisible = true
+                    updateError = null
+                }
+                is UpdateChecker.CheckResult.UpToDate -> {
+                    updateAvailable = null
+                    updateDialogVisible = false
+                }
+                is UpdateChecker.CheckResult.Error -> {
+                    updateAvailable = null
+                    updateDialogVisible = false
+                }
+            }
+        }
+    }
+
+    fun skipUpdate() {
+        updateDialogVisible = false
+        updateSkippedThisSession = true
+        updateDownloading = false
+        updateProgress = 0
+        updateError = null
+    }
+
+    fun startDownloadUpdate() {
+        val info = updateAvailable ?: return
+        updateDownloading = true
+        updateProgress = 0
+        updateError = null
+        viewModelScope.launch {
+            when (val result = updateChecker.downloadApk(info.apkUrl) { pct ->
+                updateProgress = pct
+            }) {
+                is UpdateChecker.DownloadResult.Success -> {
+                    updateDownloading = false
+                    val ok = updateChecker.installApk(result.file)
+                    if (!ok) {
+                        updateError =
+                            "Разрешите установку из неизвестных источников в настройках, затем нажмите «Скачать» снова."
+                        updateDownloading = false
+                    } else {
+                        updateDialogVisible = false
+                    }
+                }
+                is UpdateChecker.DownloadResult.Error -> {
+                    updateDownloading = false
+                    updateError = result.message
+                }
+            }
+        }
+    }
+
+    fun dismissUpdateError() {
+        updateError = null
     }
 }
