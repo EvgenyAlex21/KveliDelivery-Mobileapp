@@ -2,8 +2,10 @@ package com.kvelidelivery.app
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -48,6 +50,14 @@ fun KveliDeliveryApp(viewModel: AppViewModel = viewModel()) {
         )
     }
 
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.importEmployeeBase(uri)
+        }
+    }
+
     AnimatedContent(
         targetState = viewModel.currentScreen,
         transitionSpec = {
@@ -60,11 +70,24 @@ fun KveliDeliveryApp(viewModel: AppViewModel = viewModel()) {
             is Screen.DriverSelect -> DriverSelectScreen(
                 todayDate = viewModel.todayDate,
                 timeSlots = viewModel.timeSlots,
-                extendedSlots = viewModel.extendedSlots,
-                onExtendedSlotsChange = { viewModel.updateExtendedSlots(it) },
+                slotMode = viewModel.slotMode,
+                onSlotModeChange = { viewModel.updateSlotMode(it) },
                 onSelect = { viewModel.selectDriver(it) },
                 employeeBaseCount = viewModel.employeeBaseCount,
-                onExportEmployeeBase = { viewModel.exportEmployeeBase() }
+                baseMessage = viewModel.lastBaseMessage,
+                onSaveEmployeeBase = { viewModel.saveEmployeeBaseToDownloads() },
+                onImportEmployeeBase = {
+                    importLauncher.launch(
+                        arrayOf(
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            "application/vnd.ms-excel",
+                            "application/octet-stream",
+                            "*/*"
+                        )
+                    )
+                },
+                onViewEmployeeBase = { viewModel.viewEmployeeBase() },
+                onDismissBaseMessage = { viewModel.clearBaseMessage() }
             )
             is Screen.InputList -> {
                 val driver = viewModel.selectedDriver

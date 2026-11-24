@@ -13,7 +13,7 @@ class SessionStore(context: Context) {
         val driverNumber: Int?,
         val inputText: String,
         val people: List<Person>,
-        val extendedSlots: Boolean = false
+        val slotMode: SlotMode = SlotMode.AUTO
     )
 
     fun save(
@@ -21,7 +21,7 @@ class SessionStore(context: Context) {
         driverNumber: Int?,
         inputText: String,
         people: List<Person>,
-        extendedSlots: Boolean = false
+        slotMode: SlotMode = SlotMode.AUTO
     ) {
         val screenToSave = when (screen) {
             "Processing" -> "Result"
@@ -48,7 +48,8 @@ class SessionStore(context: Context) {
             .putInt(KEY_DRIVER, driverNumber ?: -1)
             .putString(KEY_INPUT, inputText)
             .putString(KEY_PEOPLE, arr.toString())
-            .putBoolean(KEY_EXTENDED, extendedSlots)
+            .putString(KEY_SLOT_MODE, slotMode.name)
+            .remove(KEY_EXTENDED)
             .apply()
     }
 
@@ -81,8 +82,18 @@ class SessionStore(context: Context) {
         } catch (_: Exception) {
             // ignore corrupt data
         }
-        val extended = prefs.getBoolean(KEY_EXTENDED, false)
-        return Session(screen, driverNum, input, people, extended)
+        val slotMode = when {
+            prefs.contains(KEY_SLOT_MODE) -> {
+                try {
+                    SlotMode.valueOf(prefs.getString(KEY_SLOT_MODE, SlotMode.AUTO.name)!!)
+                } catch (_: Exception) {
+                    SlotMode.AUTO
+                }
+            }
+            prefs.getBoolean(KEY_EXTENDED, false) -> SlotMode.UNTIL_01
+            else -> SlotMode.AUTO
+        }
+        return Session(screen, driverNum, input, people, slotMode)
     }
 
     fun clear() {
@@ -96,5 +107,6 @@ class SessionStore(context: Context) {
         private const val KEY_INPUT = "input"
         private const val KEY_PEOPLE = "people"
         private const val KEY_EXTENDED = "extended_slots"
+        private const val KEY_SLOT_MODE = "slot_mode"
     }
 }

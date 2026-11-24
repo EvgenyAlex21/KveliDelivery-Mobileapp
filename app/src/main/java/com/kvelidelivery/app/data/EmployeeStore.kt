@@ -1,15 +1,22 @@
 package com.kvelidelivery.app.data
 
 import android.content.Context
+import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
+import java.io.InputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
+import org.xmlpull.v1.XmlPullParser
+import org.xmlpull.v1.XmlPullParserFactory
+import java.io.StringReader
+import java.io.ByteArrayOutputStream
 
 class EmployeeStore(context: Context) {
 
@@ -123,7 +130,6 @@ class EmployeeStore(context: Context) {
             }
             val districts = byName.mapNotNull { it.district }.distinct()
             if (districts.size == 1) return districts.first()
-            // Если несколько — предпочитаем тот, что совпадает с адресом
             if (addrNorm.isNotEmpty()) {
                 for (r in byName) {
                     val rAddr = r.address.lowercase().trim().replace('ё', 'е')
@@ -202,16 +208,22 @@ class EmployeeStore(context: Context) {
                 )
                 zos.closeEntry()
 
-                // xl/styles.xml (минимальный)
+                // xl/styles.xml (заголовки: жирный шрифт + выравнивание по центру)
                 zos.putNextEntry(ZipEntry("xl/styles.xml"))
                 zos.write(
                     """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
+  <fonts count="2">
+    <font><sz val="11"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><name val="Calibri"/></font>
+  </fonts>
   <fills count="1"><fill><patternFill patternType="none"/></fill></fills>
   <borders count="1"><border/></borders>
   <cellStyleXfs count="1"><xf/></cellStyleXfs>
-  <cellXfs count="1"><xf/></cellXfs>
+  <cellXfs count="2">
+    <xf/>
+    <xf fontId="1" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+  </cellXfs>
 </styleSheet>""".toByteArray(Charsets.UTF_8)
                 )
                 zos.closeEntry()
@@ -229,7 +241,6 @@ class EmployeeStore(context: Context) {
                 headers.forEach { si(it) }
 
                 val dateFmt = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
-                // Порядок районов для сортировки в Excel
                 val districtOrder = listOf(
                     "СЗР", "ЮЗР", "ЦЕНТР", "НОВЫЙ", "НЧК", "НЮР", "КУГЕСИ", "БОГДАНКА"
                 )
@@ -273,18 +284,30 @@ class EmployeeStore(context: Context) {
                 val sb = StringBuilder()
                 sb.append("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>""")
                 sb.append("""<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">""")
+
+                val colWidths = (0 until 5).map { col ->
+                    val maxLen = maxOf(
+                        headers[col].length,
+                        rowsData.maxOfOrNull { it[col].length } ?: 0
+                    )
+                    (maxLen + 3).coerceIn(8, 60)
+                }
+                sb.append("<cols>")
+                colWidths.forEachIndexed { i, w ->
+                    sb.append("""<col min="${i + 1}" max="${i + 1}" width="$w" customWidth="1"/>""")
+                }
+                sb.append("</cols>")
+
                 sb.append("<sheetData>")
 
-                // Header row
                 sb.append("""<row r="1">""")
                 headers.forEachIndexed { col, h ->
                     val ref = cellRef(col, 0)
                     val idx = si(h)
-                    sb.append("""<c r="$ref" t="s"><v>$idx</v></c>""")
+                    sb.append("""<c r="$ref" t="s" s="1"><v>$idx</v></c>""")
                 }
                 sb.append("</row>")
 
-                // Data rows
                 rowsData.forEachIndexed { rowIdx, row ->
                     val rNum = rowIdx + 2
                     sb.append("""<row r="$rNum">""")
@@ -296,7 +319,6 @@ class EmployeeStore(context: Context) {
                     sb.append("</row>")
                 }
 
-                // Автофильтр по всем столбцам (A1:E{lastRow})
                 val lastRow = rowsData.size + 1
                 sb.append("</sheetData>")
                 sb.append("""<autoFilter ref="A1:E$lastRow"/>""")
@@ -319,6 +341,298 @@ class EmployeeStore(context: Context) {
             c = c / 26 - 1
         } while (c >= 0)
         return "${sb}${row + 1}"
+    }
+
+    data class ImportResult(
+        val success: Boolean,
+        val message: String,
+        val imported: Int = 0,
+        val skipped: Int = 0,
+        val total: Int = 0
+    )
+
+    fun importFromExcel(uri: Uri): ImportResult {
+        return try {
+            val stream = appContext.contentResolver.openInputStream(uri)
+                ?: return ImportResult(false, "Не удалось открыть файл")
+            stream.use { input ->
+                importFromStream(input)
+            }
+        } catch (e: Exception) {
+            ImportResult(false, "Ошибка чтения файла: ${e.message}")
+        }
+    }
+
+    fun importFromStream(input: InputStream): ImportResult {
+        val entries = mutableMapOf<String, ByteArray>()
+        try {
+            ZipInputStream(input).use { zis ->
+                var entry = zis.nextEntry
+                while (entry != null) {
+                    if (!entry.isDirectory) {
+                        val name = entry.name
+                        if (name == "xl/sharedStrings.xml" ||
+                            name == "xl/worksheets/sheet1.xml" ||
+                            name.startsWith("xl/worksheets/")
+                        ) {
+                            val bos = ByteArrayOutputStream()
+                            zis.copyTo(bos)
+                            entries[name] = bos.toByteArray()
+                        }
+                    }
+                    zis.closeEntry()
+                    entry = zis.nextEntry
+                }
+            }
+        } catch (e: Exception) {
+            return ImportResult(false, "Файл не похож на Excel (.xlsx): ${e.message}")
+        }
+
+        val sharedStrings = parseSharedStrings(
+            entries["xl/sharedStrings.xml"]?.toString(Charsets.UTF_8) ?: ""
+        )
+
+        val sheetXml = entries["xl/worksheets/sheet1.xml"]?.toString(Charsets.UTF_8)
+            ?: entries.entries.firstOrNull { it.key.startsWith("xl/worksheets/") }?.value?.toString(Charsets.UTF_8)
+            ?: return ImportResult(false, "В файле нет листа с данными (sheet1)")
+
+        val rows = parseSheetRows(sheetXml, sharedStrings)
+        if (rows.isEmpty()) {
+            return ImportResult(false, "Таблица пуста или не удалось прочитать строки")
+        }
+
+        val header = rows.first().map { it.trim().lowercase() }
+        val colName = findColumn(header, listOf("имя", "name", "фио", "сотрудник"))
+        val colRole = findColumn(header, listOf("роль", "role", "должность", "тип"))
+        val colAddress = findColumn(header, listOf("адрес", "address", "адресс"))
+        val colDistrict = findColumn(header, listOf("район", "district", "зона"))
+        val colAdded = findColumn(header, listOf("добавлено", "added", "дата", "addedat"))
+
+        if (colAddress < 0) {
+            return ImportResult(
+                false,
+                "Не найден столбец «Адрес». Ожидаются заголовки: Имя, Роль, Адрес, Район, Добавлено"
+            )
+        }
+
+        val knownHeaders = listOf(colName, colRole, colAddress, colDistrict).count { it >= 0 }
+        if (knownHeaders < 1) {
+            return ImportResult(
+                false,
+                "Таблица не соответствует формату базы сотрудников. Нужны столбцы: Имя, Роль, Адрес, Район"
+            )
+        }
+
+        val dateFormats = listOf(
+            SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()),
+            SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()),
+            SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()),
+            SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        )
+
+        val existing = loadAll().toMutableList()
+        val keys = existing.map { normalizeKey(it.name, it.address) }.toMutableSet()
+        var imported = 0
+        var skipped = 0
+
+        for (i in 1 until rows.size) {
+            val row = rows[i]
+            fun cell(col: Int): String =
+                if (col >= 0 && col < row.size) row[col].trim() else ""
+
+            val address = cell(colAddress)
+            if (address.isBlank()) {
+                skipped++
+                continue
+            }
+            val name = cell(colName).takeIf { it.isNotBlank() }
+            val role = cell(colRole).takeIf { it.isNotBlank() }
+            val district = cell(colDistrict).takeIf { it.isNotBlank() }
+            val addedRaw = cell(colAdded)
+            var addedAt = 0L
+            if (addedRaw.isNotBlank()) {
+                for (fmt in dateFormats) {
+                    try {
+                        val d = fmt.parse(addedRaw)
+                        if (d != null) {
+                            addedAt = d.time
+                            break
+                        }
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+
+            val key = normalizeKey(name, address)
+            if (key in keys) {
+                skipped++
+                continue
+            }
+            existing.add(
+                EmployeeRecord(
+                    name = name,
+                    role = role,
+                    address = address,
+                    district = district,
+                    addedAt = if (addedAt > 0) addedAt else System.currentTimeMillis()
+                )
+            )
+            keys.add(key)
+            imported++
+        }
+
+        if (imported > 0) {
+            saveAll(existing)
+        }
+
+        val total = existing.size
+        val msg = when {
+            imported == 0 && skipped > 0 ->
+                "Новых записей нет (пропущено $skipped: пустой адрес или уже есть в базе). Всего в базе: $total"
+            imported == 0 ->
+                "Не найдено ни одной валидной строки с адресом"
+            else ->
+                "Импортировано: $imported, пропущено: $skipped. Всего в базе: $total"
+        }
+        return ImportResult(
+            success = imported > 0 || (imported == 0 && skipped > 0 && total > 0),
+            message = msg,
+            imported = imported,
+            skipped = skipped,
+            total = total
+        )
+    }
+
+    private fun findColumn(header: List<String>, aliases: List<String>): Int {
+        for ((i, h) in header.withIndex()) {
+            val n = h.lowercase().trim()
+            if (aliases.any { it == n || n.contains(it) }) return i
+        }
+        return -1
+    }
+
+    private fun parseSharedStrings(xml: String): List<String> {
+        if (xml.isBlank()) return emptyList()
+        val result = mutableListOf<String>()
+        try {
+            val factory = XmlPullParserFactory.newInstance()
+            factory.isNamespaceAware = true
+            val parser = factory.newPullParser()
+            parser.setInput(StringReader(xml))
+            var inT = false
+            val sb = StringBuilder()
+            var event = parser.eventType
+            while (event != XmlPullParser.END_DOCUMENT) {
+                when (event) {
+                    XmlPullParser.START_TAG -> {
+                        if (parser.name == "t" || parser.name?.endsWith(":t") == true) {
+                            inT = true
+                            sb.clear()
+                        } else if (parser.name == "si" || parser.name?.endsWith(":si") == true) {
+                            sb.clear()
+                        }
+                    }
+                    XmlPullParser.TEXT -> {
+                        if (inT) sb.append(parser.text)
+                    }
+                    XmlPullParser.END_TAG -> {
+                        if (parser.name == "t" || parser.name?.endsWith(":t") == true) {
+                            inT = false
+                        } else if (parser.name == "si" || parser.name?.endsWith(":si") == true) {
+                            result.add(sb.toString())
+                            sb.clear()
+                        }
+                    }
+                }
+                event = parser.next()
+            }
+        } catch (_: Exception) {
+        }
+        return result
+    }
+
+    private fun parseSheetRows(xml: String, sharedStrings: List<String>): List<List<String>> {
+        val rows = mutableListOf<List<String>>()
+        try {
+            val factory = XmlPullParserFactory.newInstance()
+            factory.isNamespaceAware = true
+            val parser = factory.newPullParser()
+            parser.setInput(StringReader(xml))
+            var event = parser.eventType
+            var currentRow: MutableList<String>? = null
+            var currentCellRef: String? = null
+            var currentType: String? = null
+            var inV = false
+            val cellValue = StringBuilder()
+
+            fun colIndexFromRef(ref: String): Int {
+                var col = 0
+                for (ch in ref) {
+                    if (ch.isLetter()) {
+                        col = col * 26 + (ch.uppercaseChar() - 'A' + 1)
+                    } else break
+                }
+                return col - 1
+            }
+
+            while (event != XmlPullParser.END_DOCUMENT) {
+                when (event) {
+                    XmlPullParser.START_TAG -> {
+                        val name = parser.name ?: ""
+                        when {
+                            name == "row" || name.endsWith(":row") -> {
+                                currentRow = mutableListOf()
+                            }
+                            name == "c" || name.endsWith(":c") -> {
+                                currentCellRef = parser.getAttributeValue(null, "r")
+                                currentType = parser.getAttributeValue(null, "t")
+                                cellValue.clear()
+                            }
+                            name == "v" || name.endsWith(":v") || name == "t" || name.endsWith(":t") -> {
+                                inV = true
+                                cellValue.clear()
+                            }
+                        }
+                    }
+                    XmlPullParser.TEXT -> {
+                        if (inV) cellValue.append(parser.text)
+                    }
+                    XmlPullParser.END_TAG -> {
+                        val name = parser.name ?: ""
+                        when {
+                            name == "v" || name.endsWith(":v") || name == "t" || name.endsWith(":t") -> {
+                                inV = false
+                            }
+                            name == "c" || name.endsWith(":c") -> {
+                                val row = currentRow
+                                if (row != null) {
+                                    val colIdx = currentCellRef?.let { colIndexFromRef(it) } ?: row.size
+                                    while (row.size <= colIdx) row.add("")
+                                    val raw = cellValue.toString()
+                                    val value = if (currentType == "s") {
+                                        val idx = raw.toIntOrNull()
+                                        if (idx != null && idx in sharedStrings.indices) sharedStrings[idx] else raw
+                                    } else {
+                                        raw
+                                    }
+                                    row[colIdx] = value
+                                }
+                                currentCellRef = null
+                                currentType = null
+                                cellValue.clear()
+                            }
+                            name == "row" || name.endsWith(":row") -> {
+                                currentRow?.let { rows.add(it.toList()) }
+                                currentRow = null
+                            }
+                        }
+                    }
+                }
+                event = parser.next()
+            }
+        } catch (_: Exception) {
+        }
+        return rows
     }
 
     companion object {

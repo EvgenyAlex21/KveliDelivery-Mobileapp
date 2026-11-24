@@ -3,15 +3,19 @@ package com.kvelidelivery.app.ui.screens
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.DirectionsCar
-import androidx.compose.material.icons.rounded.NightsStay
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Upload
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -21,20 +25,33 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import com.kvelidelivery.app.R
 import com.kvelidelivery.app.data.Driver
+import com.kvelidelivery.app.data.EmployeeStore
+import com.kvelidelivery.app.data.SlotMode
 import com.kvelidelivery.app.ui.theme.PrimaryBlue
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DriverSelectScreen(
     todayDate: String,
     timeSlots: List<String>,
-    extendedSlots: Boolean,
-    onExtendedSlotsChange: (Boolean) -> Unit,
+    slotMode: SlotMode,
+    onSlotModeChange: (SlotMode) -> Unit,
     onSelect: (Driver) -> Unit,
     employeeBaseCount: Int = 0,
-    onExportEmployeeBase: (() -> Unit)? = null
+    baseMessage: String? = null,
+    onSaveEmployeeBase: (() -> Unit)? = null,
+    onImportEmployeeBase: (() -> Unit)? = null,
+    onViewEmployeeBase: (() -> List<EmployeeStore.EmployeeRecord>)? = null,
+    onDismissBaseMessage: (() -> Unit)? = null
 ) {
+    var showBaseDialog by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -102,64 +119,45 @@ fun DriverSelectScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(20.dp)
         ) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (extendedSlots)
-                        PrimaryBlue.copy(alpha = 0.12f)
-                    else
-                        MaterialTheme.colorScheme.surface
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .background(
-                                PrimaryBlue.copy(alpha = 0.12f),
-                                RoundedCornerShape(12.dp)
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Rounded.NightsStay,
-                            contentDescription = null,
-                            tint = PrimaryBlue,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "Расширенные слоты",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            if (extendedSlots)
-                                "22:00, 23:00, 00:00, 01:00"
-                            else
-                                "Включи, если ресторан работает до 01:00",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = extendedSlots,
-                        onCheckedChange = onExtendedSlotsChange,
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = PrimaryBlue
-                        )
+            Text(
+                "Режим слотов",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                SegmentedButton(
+                    selected = slotMode == SlotMode.UNTIL_23,
+                    onClick = { onSlotModeChange(SlotMode.UNTIL_23) },
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
+                    colors = SegmentedButtonDefaults.colors(
+                        activeContainerColor = PrimaryBlue,
+                        activeContentColor = Color.White
                     )
+                ) {
+                    Text("до 23:00", style = MaterialTheme.typography.labelMedium)
+                }
+                SegmentedButton(
+                    selected = slotMode == SlotMode.AUTO,
+                    onClick = { onSlotModeChange(SlotMode.AUTO) },
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
+                    colors = SegmentedButtonDefaults.colors(
+                        activeContainerColor = PrimaryBlue,
+                        activeContentColor = Color.White
+                    )
+                ) {
+                    Text("Авто", style = MaterialTheme.typography.labelMedium)
+                }
+                SegmentedButton(
+                    selected = slotMode == SlotMode.UNTIL_01,
+                    onClick = { onSlotModeChange(SlotMode.UNTIL_01) },
+                    shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
+                    colors = SegmentedButtonDefaults.colors(
+                        activeContainerColor = PrimaryBlue,
+                        activeContentColor = Color.White
+                    )
+                ) {
+                    Text("до 01:00", style = MaterialTheme.typography.labelMedium)
                 }
             }
 
@@ -180,27 +178,163 @@ fun DriverSelectScreen(
                 Spacer(Modifier.height(12.dp))
             }
 
-            if (onExportEmployeeBase != null) {
+            if (onSaveEmployeeBase != null || onImportEmployeeBase != null || onViewEmployeeBase != null) {
                 Spacer(Modifier.height(16.dp))
-                OutlinedButton(
-                    onClick = onExportEmployeeBase,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Text(
-                        if (employeeBaseCount > 0)
-                            "База сотрудников ($employeeBaseCount) в Excel"
-                        else
-                            "База сотрудников (пуста)"
-                    )
+                Text(
+                    "База сотрудников ($employeeBaseCount записей)",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(bottom = 10.dp)
+                )
+                if (onViewEmployeeBase != null) {
+                    OutlinedButton(
+                        onClick = { showBaseDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Посмотреть")
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    if (onSaveEmployeeBase != null) {
+                        OutlinedButton(
+                            onClick = onSaveEmployeeBase,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            enabled = employeeBaseCount > 0
+                        ) {
+                            Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Скачать")
+                        }
+                    }
+                    if (onSaveEmployeeBase != null && onImportEmployeeBase != null) {
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    if (onImportEmployeeBase != null) {
+                        Button(
+                            onClick = onImportEmployeeBase,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                        ) {
+                            Icon(Icons.Rounded.Upload, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Загрузить")
+                        }
+                    }
+                }
+                if (baseMessage != null) {
+                    Spacer(Modifier.height(10.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = PrimaryBlue.copy(alpha = 0.1f)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                baseMessage,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (onDismissBaseMessage != null) {
+                                TextButton(onClick = onDismissBaseMessage) {
+                                    Text("OK")
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
             Spacer(Modifier.height(24.dp))
         }
     }
+
+    if (showBaseDialog && onViewEmployeeBase != null) {
+        val records = remember(showBaseDialog) { onViewEmployeeBase.invoke() }
+        val dateFmt = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
+
+        Dialog(onDismissRequest = { showBaseDialog = false }) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.9f),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                )
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, top = 16.dp, end = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "База сотрудников (${records.size})",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = { showBaseDialog = false }) {
+                            Text("Закрыть")
+                        }
+                    }
+                    if (records.isEmpty()) {
+                        Text(
+                            "База пуста",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(24.dp)
+                        )
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                                .padding(horizontal = 16.dp)
+                        ) {
+                            itemsIndexed(records) { index, r ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 6.dp),
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                    )
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        BaseFieldRow("№", (index + 1).toString())
+                                        r.name?.let { BaseFieldRow("Имя", it) }
+                                        r.role?.let { BaseFieldRow("Роль", it) }
+                                        BaseFieldRow("Адрес", r.address)
+                                        r.district?.let { BaseFieldRow("Район", it) }
+                                        if (r.addedAt > 0) {
+                                            BaseFieldRow("Добавлено", dateFmt.format(Date(r.addedAt)))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DriverCard(driver: Driver, onClick: () -> Unit) {
     Card(
@@ -247,5 +381,22 @@ private fun DriverCard(driver: Driver, onClick: () -> Unit) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun BaseFieldRow(label: String, value: String) {
+    Row(modifier = Modifier.padding(vertical = 1.dp)) {
+        Text(
+            "$label: ",
+            style = MaterialTheme.typography.bodySmall,
+            color = PrimaryBlue,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            value,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }

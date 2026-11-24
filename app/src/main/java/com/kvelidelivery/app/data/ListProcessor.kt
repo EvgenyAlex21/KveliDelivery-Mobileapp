@@ -41,17 +41,29 @@ object ListProcessor {
 
     private val SLOT_ORDER = listOf("22:00", "23:00", "00:00", "01:00")
 
-    fun getTimeSlots(extended: Boolean = false): List<String> {
-        if (extended) return listOf("22:00", "23:00", "00:00", "01:00")
-        val weekday = LocalDateTime.now().dayOfWeek
-        return if (weekday == DayOfWeek.FRIDAY || weekday == DayOfWeek.SATURDAY) {
-            listOf("22:00", "23:00", "00:00", "01:00")
-        } else {
-            listOf("22:00", "23:00")
+    fun getTimeSlots(mode: SlotMode = SlotMode.AUTO): List<String> {
+        return when (mode) {
+            SlotMode.UNTIL_01 -> listOf("22:00", "23:00", "00:00", "01:00")
+            SlotMode.UNTIL_23 -> listOf("22:00", "23:00")
+            SlotMode.AUTO -> {
+                val weekday = LocalDateTime.now().dayOfWeek
+                if (weekday == DayOfWeek.FRIDAY || weekday == DayOfWeek.SATURDAY) {
+                    listOf("22:00", "23:00", "00:00", "01:00")
+                } else {
+                    listOf("22:00", "23:00")
+                }
+            }
         }
     }
 
-    fun getDefaultMainTime(extended: Boolean = false): String = getTimeSlots(extended).last()
+    /** Совместимость: extended=true → UNTIL_01, false → AUTO */
+    fun getTimeSlots(extended: Boolean): List<String> =
+        getTimeSlots(if (extended) SlotMode.UNTIL_01 else SlotMode.AUTO)
+
+    fun getDefaultMainTime(mode: SlotMode = SlotMode.AUTO): String = getTimeSlots(mode).last()
+
+    fun getDefaultMainTime(extended: Boolean): String =
+        getDefaultMainTime(if (extended) SlotMode.UNTIL_01 else SlotMode.AUTO)
 
     fun getDeliveryDefaultTime(): String = "22:00"
 
@@ -64,24 +76,33 @@ object ListProcessor {
     }
 
     /** Слоты для активной поездки: настройки + уже встречающиеся у людей (не сжимаются после полуночи). */
-    fun getEffectiveTimeSlots(extended: Boolean, peopleSlots: Collection<String> = emptyList()): List<String> {
-        val base = getTimeSlots(extended)
+    fun getEffectiveTimeSlots(mode: SlotMode, peopleSlots: Collection<String> = emptyList()): List<String> {
+        val base = getTimeSlots(mode)
         val extra = peopleSlots.filter { it in SLOT_ORDER }
         return (base + extra)
             .distinct()
             .sortedBy { SLOT_ORDER.indexOf(it).let { i -> if (i < 0) 100 else i } }
     }
 
+    fun getEffectiveTimeSlots(extended: Boolean, peopleSlots: Collection<String> = emptyList()): List<String> =
+        getEffectiveTimeSlots(if (extended) SlotMode.UNTIL_01 else SlotMode.AUTO, peopleSlots)
+
     fun clampSlotToAllowed(
         slot: String?,
-        extended: Boolean,
+        mode: SlotMode,
         peopleSlots: Collection<String> = emptyList()
     ): String {
-        val allowed = getEffectiveTimeSlots(extended, peopleSlots)
+        val allowed = getEffectiveTimeSlots(mode, peopleSlots)
         if (slot.isNullOrBlank()) return allowed.last()
         if (slot in allowed) return slot
         return allowed.last()
     }
+
+    fun clampSlotToAllowed(
+        slot: String?,
+        extended: Boolean,
+        peopleSlots: Collection<String> = emptyList()
+    ): String = clampSlotToAllowed(slot, if (extended) SlotMode.UNTIL_01 else SlotMode.AUTO, peopleSlots)
 
     private fun partialRatio(s1: String, s2: String): Int {
         if (s1.isEmpty() || s2.isEmpty()) return 0
@@ -113,6 +134,8 @@ object ListProcessor {
         val norm = normalize(addressStr)
 
         if ("кугеси" in norm) return "КУГЕСИ"
+        if ("кугеси" in norm) return "КУГЕСИ"
+        if ("айги" in norm || "геннади" in norm) return "БОГДАНКА"        
         if (listOf("богдан", "б.х", "бх", "кошкино").any { it in norm }) return "БОГДАНКА"
         if ("лебедева" in norm) return "СЗР"
         if (("500" in norm && "чебоксар" in norm) || "500лет" in norm.replace(" ", "")) return "СЗР"
@@ -322,13 +345,13 @@ object ListProcessor {
         }
     }
 
-    fun parseInput(text: String, extendedSlots: Boolean = false): List<Person> {
+    fun parseInput(text: String, slotMode: SlotMode = SlotMode.AUTO): List<Person> {
         var cleaned = text.replace(Regex("\\[\\d{2}\\.\\d{2}\\.\\d{4}\\s+\\d{1,2}:\\d{2}\\]\\s*"), "")
         val lines = cleaned.trim().lines()
         val people = mutableListOf<Person>()
         var currentRole: String? = null
         var currentTime: String? = null
-        val mainTime = getDefaultMainTime(extendedSlots)
+        val mainTime = getDefaultMainTime(slotMode)
 
         val sectionKeywords = mapOf(
             "клининг" to "клин",
@@ -531,7 +554,7 @@ object ListProcessor {
                     currentRole == "дост" && currentTime == null -> getDeliveryDefaultTime()
                     else -> currentTime ?: mainTime
                 }
-                val timeGroup = clampSlotToAllowed(rawTime, extendedSlots)
+                val timeGroup = clampSlotToAllowed(rawTime, slotMode)
 
                 var addressClean = addressForParse.ifBlank { address }
                 addressClean = addressClean.replace(Regex("\\d+\\s*чел\\.?\\s*", RegexOption.IGNORE_CASE), "")
@@ -689,9 +712,9 @@ object ListProcessor {
     fun buildStructuredOutput(
         people: List<Person>,
         selectedDriver: Driver,
-        extendedSlots: Boolean = false
+        slotMode: SlotMode = SlotMode.AUTO
     ): List<TimeSlotGroup> {
-        val configured = getTimeSlots(extendedSlots)
+        val configured = getTimeSlots(slotMode)
         val fromPeople = people.map { it.timeGroup }.filter { it.isNotBlank() }.distinct()
 
         val slotOrder = listOf("22:00", "23:00", "00:00", "01:00")

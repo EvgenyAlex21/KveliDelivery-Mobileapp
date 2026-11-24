@@ -1,24 +1,32 @@
 package com.kvelidelivery.app.ui
 
 import android.app.Application
+import android.content.ContentValues
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import android.content.Intent
-import android.net.Uri
-import androidx.core.content.FileProvider
 import com.kvelidelivery.app.data.Driver
 import com.kvelidelivery.app.data.EmployeeStore
 import com.kvelidelivery.app.data.ListProcessor
 import com.kvelidelivery.app.data.Person
 import com.kvelidelivery.app.data.SessionStore
+import com.kvelidelivery.app.data.SlotMode
 import com.kvelidelivery.app.data.TimeSlotGroup
 import com.kvelidelivery.app.data.UpdateChecker
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileInputStream
 
 sealed class Screen {
     data object Help : Screen()
@@ -61,7 +69,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     var employeeBaseCount by mutableStateOf(0)
         private set
 
-    var lastExportMessage by mutableStateOf<String?>(null)
+    var lastBaseMessage by mutableStateOf<String?>(null)
         private set
 
     var selectedDriver by mutableStateOf<Driver?>(null)
@@ -82,7 +90,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     var errorMessage by mutableStateOf<String?>(null)
         private set
 
-    var extendedSlots by mutableStateOf(false)
+    var slotMode by mutableStateOf(SlotMode.AUTO)
         private set
 
     var updateAvailable by mutableStateOf<UpdateChecker.UpdateInfo?>(null)
@@ -108,7 +116,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     val timeSlots: List<String>
         get() = ListProcessor.getEffectiveTimeSlots(
-            extendedSlots,
+            slotMode,
             people.map { it.timeGroup }
         )
 
@@ -127,7 +135,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         selectedDriver = Driver.entries.find { it.number == session.driverNumber }
         inputText = session.inputText
         people = session.people
-        extendedSlots = session.extendedSlots
+        slotMode = session.slotMode
         if (people.isNotEmpty()) {
             rebuildStructured()
         }
@@ -147,7 +155,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             driverNumber = selectedDriver?.number,
             inputText = inputText,
             people = people,
-            extendedSlots = extendedSlots
+            slotMode = slotMode
         )
     }
 
@@ -162,10 +170,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         persist()
     }
 
-    fun updateExtendedSlots(enabled: Boolean) {
-        extendedSlots = enabled
+    fun updateSlotMode(mode: SlotMode) {
+        if (slotMode == mode) return
+        slotMode = mode
         if (people.isNotEmpty()) rebuildStructured()
         persist()
+    }
+
+    fun updateSlotUntil23(enabled: Boolean) {
+        updateSlotMode(if (enabled) SlotMode.UNTIL_23 else SlotMode.AUTO)
+    }
+
+    fun updateSlotUntil01(enabled: Boolean) {
+        updateSlotMode(if (enabled) SlotMode.UNTIL_01 else SlotMode.AUTO)
     }
 
     fun updateInput(text: String) {
@@ -183,7 +200,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             delay(1200)
             try {
-                val parsed = ListProcessor.parseInput(inputText, extendedSlots)
+                val parsed = ListProcessor.parseInput(inputText, slotMode)
                 if (parsed.isEmpty()) {
                     errorMessage = "Не удалось распознать ни одного человека. Проверьте формат списка."
                     currentScreen = Screen.InputList
@@ -194,9 +211,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 employeeStore.recordPeople(parsed)
                 employeeBaseCount = employeeStore.count()
                 val hasNight = parsed.any { it.timeGroup in listOf("00:00", "01:00") }
-                val isWeekendNight = ListProcessor.getTimeSlots(false).size >= 4
-                if (hasNight || isWeekendNight || extendedSlots) {
-                    extendedSlots = true
+                val isWeekendNight = ListProcessor.getTimeSlots(SlotMode.AUTO).size >= 4
+                if (hasNight || (isWeekendNight && slotMode == SlotMode.AUTO) || slotMode == SlotMode.UNTIL_01) {
+                    if (hasNight) slotMode = SlotMode.UNTIL_01
                 }
                 rebuildStructured()
                 currentScreen = Screen.Result
@@ -211,7 +228,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun rebuildStructured() {
         val drv = selectedDriver ?: Driver.ONE
-        structured = ListProcessor.buildStructuredOutput(people, drv, extendedSlots)
+        structured = ListProcessor.buildStructuredOutput(people, drv, slotMode)
         undefinedPeople = ListProcessor.getUndefined(people)
     }
 
@@ -259,7 +276,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         val clampedTime = ListProcessor.clampSlotToAllowed(
             timeGroup,
-            extendedSlots,
+            slotMode,
             people.map { it.timeGroup }
         )
         val resolvedDistrict = district?.takeIf { it.isNotBlank() }
@@ -292,7 +309,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (addr.isBlank()) return
         val clampedTime = ListProcessor.clampSlotToAllowed(
             timeGroup,
-            extendedSlots,
+            slotMode,
             people.map { it.timeGroup }
         )
         val resolvedDistrict = district?.takeIf { it.isNotBlank() }
@@ -352,7 +369,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             inputText = ""
             selectedDriver = null
             errorMessage = null
-            extendedSlots = false
+            slotMode = SlotMode.AUTO
             store.clear()
             currentScreen = Screen.Help
         }
@@ -368,11 +385,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         persist()
     }
 
+    fun viewEmployeeBase(): List<EmployeeStore.EmployeeRecord> = employeeStore.loadAll()
+
     fun exportEmployeeBase(): Boolean {
-        lastExportMessage = null
+        lastBaseMessage = null
         val file = employeeStore.exportToExcel()
         if (file == null || !file.exists()) {
-            lastExportMessage = if (employeeStore.count() == 0) {
+            lastBaseMessage = if (employeeStore.count() == 0) {
                 "База сотрудников пуста"
             } else {
                 "Не удалось создать файл Excel"
@@ -399,16 +418,82 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val chooser = Intent.createChooser(intent, "Сохранить / Открыть базу сотрудников")
             chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             getApplication<Application>().startActivity(chooser)
-            lastExportMessage = "Экспортировано: ${file.name} (${employeeStore.count()} записей)"
+            lastBaseMessage = "Экспортировано: ${file.name} (${employeeStore.count()} записей)"
             true
         } catch (e: Exception) {
-            lastExportMessage = "Ошибка: ${e.message}"
+            lastBaseMessage = "Ошибка: ${e.message}"
             false
         }
     }
 
-    fun clearExportMessage() {
-        lastExportMessage = null
+    fun saveEmployeeBaseToDownloads(): Boolean {
+        lastBaseMessage = null
+        val file = employeeStore.exportToExcel()
+        if (file == null || !file.exists()) {
+            lastBaseMessage = if (employeeStore.count() == 0) {
+                "База сотрудников пуста"
+            } else {
+                "Не удалось создать файл Excel"
+            }
+            return false
+        }
+        return try {
+            val ctx = getApplication<Application>()
+            val displayName = file.name
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val values = ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, displayName)
+                    put(MediaStore.Downloads.MIME_TYPE, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                    put(MediaStore.Downloads.IS_PENDING, 1)
+                }
+                val resolver = ctx.contentResolver
+                val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                val itemUri = resolver.insert(collection, values)
+                    ?: run {
+                        lastBaseMessage = "Не удалось создать файл в Загрузках"
+                        return false
+                    }
+                resolver.openOutputStream(itemUri)?.use { out ->
+                    FileInputStream(file).use { input -> input.copyTo(out) }
+                } ?: run {
+                    lastBaseMessage = "Не удалось записать файл"
+                    return false
+                }
+                values.clear()
+                values.put(MediaStore.Downloads.IS_PENDING, 0)
+                resolver.update(itemUri, values, null, null)
+                lastBaseMessage = "Сохранено в Загрузки: $displayName (${employeeStore.count()} записей)"
+                true
+            } else {
+                @Suppress("DEPRECATION")
+                val downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                if (!downloads.exists()) downloads.mkdirs()
+                val dest = File(downloads, displayName)
+                FileInputStream(file).use { input ->
+                    dest.outputStream().use { out -> input.copyTo(out) }
+                }
+                lastBaseMessage = "Сохранено в Загрузки: $displayName (${employeeStore.count()} записей)"
+                true
+            }
+        } catch (e: Exception) {
+            lastBaseMessage = "Ошибка сохранения: ${e.message}"
+            false
+        }
+    }
+
+    fun importEmployeeBase(uri: Uri) {
+        lastBaseMessage = null
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                employeeStore.importFromExcel(uri)
+            }
+            employeeBaseCount = employeeStore.count()
+            lastBaseMessage = result.message
+        }
+    }
+
+    fun clearBaseMessage() {
+        lastBaseMessage = null
     }
 
     fun checkForUpdates() {

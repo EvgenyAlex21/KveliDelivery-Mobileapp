@@ -19,6 +19,18 @@ enum class Driver(val number: Int, val title: String, val districts: List<String
     THREE(3, "Водитель №3", listOf("НЮР", "КУГЕСИ"), "НЮР + КУГЕСИ (+ БОГДАНКА)")
 }
 
+/**
+ * Режим временных слотов.
+ * AUTO — по дню недели: Пн–Чт + Вс → до 23:00; Пт–Сб → до 01:00.
+ * UNTIL_23 — принудительно 22:00, 23:00.
+ * UNTIL_01 — принудительно 22:00, 23:00, 00:00, 01:00.
+ */
+enum class SlotMode {
+    AUTO,
+    UNTIL_23,
+    UNTIL_01
+}
+
 data class TimeSlotGroup(
     val time: String,
     val drivers: List<DriverSection>
