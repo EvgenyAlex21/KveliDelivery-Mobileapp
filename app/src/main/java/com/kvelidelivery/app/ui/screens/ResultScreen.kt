@@ -63,7 +63,7 @@ fun ResultScreen(
     onAddPerson: (String?, String, String?, String?, String) -> Unit,
     onFinish: () -> Unit
 ) {
-    var expandedDrivers by remember { mutableStateOf(setOf(selectedDriver.number)) }
+    var viewedDriver by remember { mutableStateOf(selectedDriver) }
     var movePerson by remember { mutableStateOf<Person?>(null) }
     var reorderPersonId by remember { mutableStateOf<String?>(null) }
     var editPerson by remember { mutableStateOf<Person?>(null) }
@@ -71,6 +71,17 @@ fun ResultScreen(
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
+
+    val driverTotals = remember(structured) {
+        val totals = mutableMapOf<Driver, Int>()
+        Driver.entries.forEach { totals[it] = 0 }
+        structured.forEach { slotGroup ->
+            slotGroup.drivers.forEach { section ->
+                totals[section.driver] = (totals[section.driver] ?: 0) + section.totalCount
+            }
+        }
+        totals
+    }
 
     Scaffold(
         topBar = {
@@ -176,41 +187,82 @@ fun ResultScreen(
                 }
             }
 
-            structured.forEach { slotGroup ->
-                item {
-                    Text(
-                        "--- СПИСОК ДО ${slotGroup.time} ---",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = PrimaryBlue,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp, bottom = 4.dp),
-                        textAlign = TextAlign.Center
-                    )
-                }
-
-                slotGroup.drivers.forEach { section ->
-                    item {
-                        DriverExpandableCard(
-                            section = section,
-                            isExpanded = expandedDrivers.contains(section.driver.number),
-                            isSelected = section.driver == selectedDriver,
-                            reorderPersonId = reorderPersonId,
-                            onToggleExpand = {
-                                expandedDrivers = if (expandedDrivers.contains(section.driver.number)) {
-                                    expandedDrivers - section.driver.number
-                                } else {
-                                    expandedDrivers + section.driver.number
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Driver.entries.forEach { driver ->
+                        val isSelected = viewedDriver == driver
+                        val total = driverTotals[driver] ?: 0
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { viewedDriver = driver },
+                            label = {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "Водитель ${driver.number}",
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        fontSize = 12.sp,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Text(
+                                        text = "($total)",
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        maxLines = 1,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
                                 }
                             },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = PrimaryBlue,
+                                selectedLabelColor = Color.White
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+
+            structured.forEach { slotGroup ->
+                val section = slotGroup.drivers.find { it.driver == viewedDriver }
+                if (section != null) {
+                    item {
+                        Text(
+                            "--- СПИСОК ДО ${slotGroup.time} ---",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryBlue,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp, bottom = 4.dp),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    item {
+                        DriverSectionContent(
+                            section = section,
+                            isSelected = section.driver == selectedDriver,
+                            reorderPersonId = reorderPersonId,
                             onToggleDelivered = onToggleDelivered,
                             onMoveRequest = { movePerson = it },
                             onLongPress = { id ->
                                 reorderPersonId = if (reorderPersonId == id) null else id
                             },
                             onReorder = onReorder,
-                            onClearReorder = { reorderPersonId = null },
                             onEditRequest = { editPerson = it }
                         )
                     }
@@ -309,17 +361,14 @@ fun ResultScreen(
 }
 
 @Composable
-private fun DriverExpandableCard(
+private fun DriverSectionContent(
     section: com.kvelidelivery.app.data.DriverSection,
-    isExpanded: Boolean,
     isSelected: Boolean,
     reorderPersonId: String?,
-    onToggleExpand: () -> Unit,
     onToggleDelivered: (String) -> Unit,
     onMoveRequest: (Person) -> Unit,
     onLongPress: (String) -> Unit,
     onReorder: (String, Int) -> Unit,
-    onClearReorder: () -> Unit,
     onEditRequest: (Person) -> Unit
 ) {
     val borderColor = if (isSelected) PrimaryBlue else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
@@ -336,67 +385,51 @@ private fun DriverExpandableCard(
         border = androidx.compose.foundation.BorderStroke(1.5.dp, borderColor),
         elevation = CardDefaults.cardElevation(if (isSelected) 4.dp else 1.dp)
     ) {
-        Column {
-            Surface(onClick = onToggleExpand, color = Color.Transparent) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+        Column(modifier = Modifier.padding(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 12.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    section.driver.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = PrimaryBlue.copy(alpha = 0.15f)
                 ) {
                     Text(
-                        section.driver.title,
-                        style = MaterialTheme.typography.titleMedium,
+                        "${section.totalCount}",
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = PrimaryBlue.copy(alpha = 0.15f)
-                    ) {
-                        Text(
-                            "${section.totalCount}",
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                            fontWeight = FontWeight.Bold,
-                            color = PrimaryBlue
-                        )
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Icon(
-                        if (isExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = PrimaryBlue
                     )
                 }
             }
 
-            AnimatedVisibility(
-                visible = isExpanded,
-                enter = expandVertically(),
-                exit = shrinkVertically()
-            ) {
-                Column(modifier = Modifier.padding(start = 8.dp, end = 8.dp, bottom = 12.dp)) {
-                    section.districts.forEach { distGroup ->
-                        Text(
-                            "-- (${distGroup.activeCount}) ${distGroup.district} --",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
-                        )
-                        distGroup.people.forEach { person ->
-                            PersonRow(
-                                person = person,
-                                isReorderTarget = reorderPersonId == person.id,
-                                onToggle = { onToggleDelivered(person.id) },
-                                onMove = { onMoveRequest(person) },
-                                onLongPress = { onLongPress(person.id) },
-                                onMoveUp = { onReorder(person.id, -1) },
-                                onMoveDown = { onReorder(person.id, 1) },
-                                onEdit = { onEditRequest(person) }
-                            )
-                        }
-                    }
+            section.districts.forEach { distGroup ->
+                Text(
+                    "-- (${distGroup.activeCount}) ${distGroup.district} --",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                )
+                distGroup.people.forEach { person ->
+                    PersonRow(
+                        person = person,
+                        isReorderTarget = reorderPersonId == person.id,
+                        onToggle = { onToggleDelivered(person.id) },
+                        onMove = { onMoveRequest(person) },
+                        onLongPress = { onLongPress(person.id) },
+                        onMoveUp = { onReorder(person.id, -1) },
+                        onMoveDown = { onReorder(person.id, 1) },
+                        onEdit = { onEditRequest(person) }
+                    )
                 }
             }
         }
@@ -689,8 +722,10 @@ private fun MoveBottomSheetContent(
                         onClick = { if (!selected) onMoveToDistrict(d) },
                         label = {
                             Text(
-                                d,
-                                fontSize = 12.sp,
+                                text = d,
+                                fontSize = 10.sp,
+                                maxLines = 1,
+                                softWrap = false,
                                 modifier = Modifier.fillMaxWidth(),
                                 textAlign = TextAlign.Center
                             )
@@ -793,8 +828,10 @@ private fun EditPersonDialog(
                                 onClick = { district = d },
                                 label = {
                                     Text(
-                                        d,
-                                        fontSize = 11.sp,
+                                        text = d,
+                                        fontSize = 10.sp,
+                                        maxLines = 1,
+                                        softWrap = false,
                                         modifier = Modifier.fillMaxWidth(),
                                         textAlign = TextAlign.Center
                                     )
@@ -938,8 +975,10 @@ private fun AddPersonDialog(
                                 onClick = { district = d },
                                 label = {
                                     Text(
-                                        d,
-                                        fontSize = 11.sp,
+                                        text = d,
+                                        fontSize = 10.sp,
+                                        maxLines = 1,
+                                        softWrap = false,
                                         modifier = Modifier.fillMaxWidth(),
                                         textAlign = TextAlign.Center
                                     )

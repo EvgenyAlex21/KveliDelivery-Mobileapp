@@ -10,6 +10,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -32,6 +33,7 @@ fun InputScreen(
     onBack: () -> Unit
 ) {
     val clipboard = LocalClipboardManager.current
+    val scrollState = rememberScrollState()
 
     Scaffold(
         topBar = {
@@ -59,6 +61,7 @@ fun InputScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .imePadding() 
                 .background(MaterialTheme.colorScheme.background)
         ) {
             Surface(
@@ -94,9 +97,10 @@ fun InputScreen(
 
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(scrollState)
                     .padding(16.dp)
-                    .verticalScroll(rememberScrollState())
             ) {
                 Text(
                     "Вставь неотсортированный список",
@@ -121,7 +125,7 @@ fun InputScreen(
                     onValueChange = onInputChange,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 220.dp),
+                        .heightIn(min = 220.dp, max = 420.dp),
                     placeholder = { Text("Вставь список сюда...") },
                     shape = RoundedCornerShape(16.dp),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -170,7 +174,7 @@ fun InputScreen(
                     )
                 }
 
-                Spacer(Modifier.height(32.dp))
+                Spacer(Modifier.height(48.dp))
             }
         }
     }
